@@ -1,0 +1,17 @@
+[package]
+name = "omegaupload-cli"
+version = "0.1.0"
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+omegaupload-common = { path = "../common" }
+
+anyhow = "1"
+atty = "0.2"
+clap = "3.0.0-beta.4"
+reqwest = { version = "0.11", default-features = false, features = ["rustls-tls", "blocking"] }
+secrecy = { version = "0.8", features = ["serde"] }
+sodiumoxide = "0.2"
+url = "2"
