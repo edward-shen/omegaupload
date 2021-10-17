@@ -6,5 +6,12 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-chacha20poly1305 = "0.9"
-yew = "0.18"
+omegaupload-common = { path = "../common" }
+# Enables wasm support
+getrandom = { version = "*", features = ["js"] }
+
+anyhow = "1"
+http = "0.2"
+web-sys = { version = "0.3", features = ["Request", "Window"] }
+yew = { version = "0.18", features = ["wasm-bindgen-futures"] }
+yew-router = "0.15"
