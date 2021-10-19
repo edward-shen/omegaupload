@@ -11,6 +11,8 @@ omegaupload-common = { path = "../common" }
 getrandom = { version = "*", features = ["js"] }
 
 anyhow = "1"
+downcast-rs = "1"
+gloo-console = "0.1"
 http = "0.2"
 web-sys = { version = "0.3", features = ["Request", "Window"] }
 yew = { version = "0.18", features = ["wasm-bindgen-futures"] }

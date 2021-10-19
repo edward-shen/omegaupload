@@ -1,33 +1,31 @@
 #![warn(clippy::nursery, clippy::pedantic)]
 
-use std::sync::atomic::AtomicBool;
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-
-use axum::http::StatusCode;
-use paste::Expiration;
-use rand::prelude::StdRng;
-use rand::{Rng, SeedableRng};
-use rocksdb::IteratorMode;
-use rocksdb::WriteBatch;
-use rocksdb::{Options, DB};
-use short_code::ShortCode;
 
 use anyhow::Result;
 use axum::body::Bytes;
 use axum::extract::{Extension, Path, TypedHeader};
 use axum::handler::{get, post};
+use axum::http::header::EXPIRES;
+use axum::http::StatusCode;
 use axum::{AddExtensionLayer, Router};
+use chrono::Duration;
+use headers::HeaderMap;
+use rand::thread_rng;
+use rand::Rng;
+use rocksdb::IteratorMode;
+use rocksdb::WriteBatch;
+use rocksdb::{Options, DB};
 use tokio::task;
 use tracing::warn;
 use tracing::{error, instrument};
 
-use crate::paste::Paste;
-use crate::time::FIVE_MINUTES;
+use crate::paste::{Expiration, Paste};
+use crate::short_code::ShortCode;
 
 mod paste;
 mod short_code;
-mod time;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -41,7 +39,7 @@ async fn main() -> Result<()> {
     let stop_signal = Arc::new(AtomicBool::new(false));
     task::spawn(cleanup(Arc::clone(&stop_signal), Arc::clone(&db)));
 
-    axum::Server::bind(&"0.0.0.0:8080".parse()?)
+    axum::Server::bind(&"0.0.0.0:8081".parse()?)
         .serve(
             Router::new()
                 .route("/", post(upload::<SHORT_CODE_SIZE>))
@@ -50,7 +48,6 @@ async fn main() -> Result<()> {
                     get(paste::<SHORT_CODE_SIZE>).delete(delete::<SHORT_CODE_SIZE>),
                 )
                 .layer(AddExtensionLayer::new(db))
-                .layer(AddExtensionLayer::new(StdRng::from_entropy()))
                 .into_make_service(),
         )
         .await?;
@@ -64,7 +61,6 @@ async fn main() -> Result<()> {
 #[instrument(skip(db), err)]
 async fn upload<const N: usize>(
     Extension(db): Extension<Arc<DB>>,
-    Extension(mut rng): Extension<StdRng>,
     maybe_expires: Option<TypedHeader<Expiration>>,
     body: Bytes,
 ) -> Result<Vec<u8>, StatusCode> {
@@ -83,7 +79,7 @@ async fn upload<const N: usize>(
     // Try finding a code; give up after 1000 attempts
     // Statistics show that this is very unlikely to happen
     for _ in 0..1000 {
-        let code: ShortCode<N> = rng.sample(short_code::Generator);
+        let code: ShortCode<N> = thread_rng().sample(short_code::Generator);
         let db = Arc::clone(&db);
         let key = code.as_bytes();
         let query = task::spawn_blocking(move || db.key_may_exist(key)).await;
@@ -121,7 +117,7 @@ async fn upload<const N: usize>(
 async fn paste<const N: usize>(
     Extension(db): Extension<Arc<DB>>,
     Path(url): Path<ShortCode<N>>,
-) -> Result<Bytes, StatusCode> {
+) -> Result<(HeaderMap, Bytes), StatusCode> {
     let key = url.as_bytes();
 
     let parsed: Paste = {
@@ -172,7 +168,11 @@ async fn paste<const N: usize>(
         })?;
     }
 
-    Ok(parsed.bytes)
+    let mut map = HeaderMap::new();
+    if let Some(expiration) = parsed.expiration {
+        map.insert(EXPIRES, expiration.into());
+    }
+    Ok((map, parsed.bytes))
 }
 
 #[instrument(skip(db))]
@@ -189,7 +189,7 @@ async fn delete<const N: usize>(
 /// Periodic clean-up task that deletes expired entries.
 async fn cleanup(stop_signal: Arc<AtomicBool>, db: Arc<DB>) {
     while !stop_signal.load(Ordering::Acquire) {
-        tokio::time::sleep(*FIVE_MINUTES).await;
+        tokio::time::sleep(Duration::minutes(5).to_std().expect("infallible")).await;
         let mut batch = WriteBatch::default();
         for (key, value) in db.snapshot().iterator(IteratorMode::Start) {
             // TODO: only partially decode struct for max perf

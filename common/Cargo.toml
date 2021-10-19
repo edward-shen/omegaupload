@@ -6,3 +6,10 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+anyhow = "1"
+base64 = "0.13"
+chacha20poly1305 = "0.9"
+rand = "0.8"
+sha2 = "0.9"
+thiserror = "1"
+url = "2"

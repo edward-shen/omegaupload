@@ -11,7 +11,8 @@ axum = { version = "0.2", features = ["http2", "headers"] }
 bincode = "1"
 # We don't care about which version (We want to match with axum), we just need
 # to enable the feature
-bytes = { version = "*", features=  ["serde"] }
+bytes = { version = "*", features = ["serde"] }
+chrono = { version = "0.4", features = ["serde"] }
 # We just need to pull in whatever axum is pulling in
 headers = "*"
 lazy_static = "1"

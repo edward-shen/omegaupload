@@ -1,17 +1,16 @@
+#![warn(clippy::nursery, clippy::pedantic)]
+#![deny(unsafe_code)]
+
 use std::io::{Read, Write};
-use std::str::FromStr;
 
 use anyhow::{anyhow, bail, Context, Result};
 use atty::Stream;
 use clap::Clap;
+use omegaupload_common::crypto::{gen_key_nonce, open, seal, Key};
+use omegaupload_common::{base64, hash, ParsedUrl, Url};
 use reqwest::blocking::Client;
 use reqwest::StatusCode;
 use secrecy::{ExposeSecret, SecretString};
-use sodiumoxide::base64;
-use sodiumoxide::base64::Variant::UrlSafe;
-use sodiumoxide::crypto::hash::sha256;
-use sodiumoxide::crypto::secretbox::{gen_key, gen_nonce, open, seal, Key, Nonce, KEYBYTES};
-use url::Url;
 
 #[derive(Clap)]
 struct Opts {
@@ -32,7 +31,6 @@ enum Action {
 }
 
 fn main() -> Result<()> {
-    sodiumoxide::init().map_err(|_| anyhow!("Failed to init sodiumoxide"))?;
     let opts = Opts::parse();
 
     match opts.action {
@@ -51,24 +49,24 @@ fn handle_upload(mut url: Url, password: Option<SecretString>) -> Result<()> {
     }
 
     let (data, nonce, key, pw_used) = {
-        let enc_key = gen_key();
-        let nonce = gen_nonce();
+        let (enc_key, nonce) = gen_key_nonce();
         let mut container = Vec::new();
         std::io::stdin().read_to_end(&mut container)?;
-        let mut enc = seal(&container, &nonce, &enc_key);
+        let mut enc =
+            seal(&container, &nonce, &enc_key).map_err(|_| anyhow!("Failed to encrypt data"))?;
 
         let pw_used = if let Some(password) = password {
-            assert_eq!(sha256::DIGESTBYTES, KEYBYTES);
-            let pw_hash = sha256::hash(password.expose_secret().as_bytes());
-            let pw_key = Key::from_slice(pw_hash.as_ref()).expect("to succeed");
-            enc = seal(&enc, &nonce.increment_le(), &pw_key);
+            let pw_hash = hash(password.expose_secret().as_bytes());
+            let pw_key = Key::from_slice(pw_hash.as_ref());
+            enc = seal(&enc, &nonce.increment(), pw_key)
+                .map_err(|_| anyhow!("Failed to encrypt data"))?;
             true
         } else {
             false
         };
 
-        let key = base64::encode(&enc_key, UrlSafe);
-        let nonce = base64::encode(&nonce, UrlSafe);
+        let key = base64::encode(&enc_key);
+        let nonce = base64::encode(&nonce);
 
         (enc, nonce, key, pw_used)
     };
@@ -122,11 +120,10 @@ fn handle_download(url: ParsedUrl) -> Result<()> {
         std::io::stdin().read_line(&mut input)?;
         input.pop(); // last character is \n, we need to drop it.
 
-        assert_eq!(sha256::DIGESTBYTES, KEYBYTES);
-        let pw_hash = sha256::hash(input.as_bytes());
-        let pw_key = Key::from_slice(pw_hash.as_ref()).expect("to succeed");
+        let pw_hash = hash(input.as_bytes());
+        let pw_key = Key::from_slice(pw_hash.as_ref());
 
-        data = open(&data, &url.nonce.increment_le(), &pw_key)
+        data = open(&data, &url.nonce.increment(), pw_key)
             .map_err(|_| anyhow!("Failed to decrypt data. Incorrect password?"))?;
     }
 
@@ -144,70 +141,4 @@ fn handle_download(url: ParsedUrl) -> Result<()> {
     }
 
     Ok(())
-}
-
-struct ParsedUrl {
-    sanitized_url: Url,
-    decryption_key: Key,
-    nonce: Nonce,
-    needs_password: bool,
-}
-
-impl FromStr for ParsedUrl {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut url = Url::from_str(s)?;
-        let fragment = url
-            .fragment()
-            .context("Missing fragment. The decryption key is part of the fragment.")?;
-        if fragment.is_empty() {
-            bail!("Empty fragment. The decryption key is part of the fragment.");
-        }
-
-        let args = fragment.split('!').filter_map(|kv| {
-            let (k, v) = {
-                let mut iter = kv.split(':');
-                (iter.next(), iter.next())
-            };
-
-            Some((k?, v))
-        });
-
-        let mut decryption_key = None;
-        let mut needs_password = false;
-        let mut nonce = None;
-
-        for (key, value) in args {
-            match (key, value) {
-                ("key", Some(value)) => {
-                    let key = base64::decode(value, UrlSafe)
-                        .map_err(|_| anyhow!("Failed to decode key"))?;
-                    let key = Key::from_slice(&key).context("Failed to parse key")?;
-                    decryption_key = Some(key);
-                }
-                ("pw", _) => {
-                    needs_password = true;
-                }
-                ("nonce", Some(value)) => {
-                    nonce = Some(
-                        Nonce::from_slice(
-                            &base64::decode(value, UrlSafe)
-                                .map_err(|_| anyhow!("Failed to decode nonce"))?,
-                        )
-                        .context("Invalid nonce provided")?,
-                    );
-                }
-                _ => (),
-            }
-        }
-
-        url.set_fragment(None);
-        Ok(Self {
-            sanitized_url: url,
-            decryption_key: decryption_key.context("Missing decryption key")?,
-            needs_password,
-            nonce: nonce.context("Missing nonce")?,
-        })
-    }
 }
