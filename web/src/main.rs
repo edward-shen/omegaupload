@@ -5,10 +5,11 @@ use std::str::FromStr;
 use anyhow::{anyhow, bail};
 use bytes::Bytes;
 use downcast_rs::{impl_downcast, Downcast};
+use http::header::EXPIRES;
 use http::uri::PathAndQuery;
 use http::{StatusCode, Uri};
 use omegaupload_common::crypto::{open, Key, Nonce};
-use omegaupload_common::PartialParsedUrl;
+use omegaupload_common::{Expiration, PartialParsedUrl};
 use yew::format::Nothing;
 use yew::utils::window;
 use yew::Properties;
@@ -91,9 +92,14 @@ impl Component for Paste {
         link.send_future(async move {
             match reqwest::get(&request_uri.to_string()).await {
                 Ok(resp) if resp.status() == StatusCode::OK => {
+                    let expires = resp
+                        .headers()
+                        .get(EXPIRES)
+                        .and_then(|v| Expiration::try_from(v).ok());
                     let partial = match resp.bytes().await {
                         Ok(bytes) => PastePartial::new(
                             bytes,
+                            expires,
                             url.split_once('#')
                                 .map(|(_, fragment)| PartialParsedUrl::from(fragment))
                                 .unwrap_or_default(),
@@ -173,7 +179,8 @@ struct PasteError(anyhow::Error);
 #[derive(Properties, Clone, Debug)]
 struct PastePartial {
     parent: ComponentLink<Paste>,
-    data: Option<Bytes>,
+    data: Bytes,
+    expires: Option<Expiration>,
     key: Option<Key>,
     nonce: Option<Nonce>,
     password: Option<Key>,
@@ -183,6 +190,7 @@ struct PastePartial {
 #[derive(Properties, Clone)]
 struct PasteComplete {
     data: Bytes,
+    expires: Option<Expiration>,
     key: Key,
     nonce: Nonce,
     password: Option<Key>,
@@ -198,13 +206,15 @@ impl PasteState for PasteComplete {}
 
 impl PastePartial {
     fn new(
-        resp: Bytes,
+        data: Bytes,
+        expires: Option<Expiration>,
         partial_parsed_url: PartialParsedUrl,
         parent: ComponentLink<Paste>,
     ) -> Self {
         Self {
             parent,
-            data: Some(resp),
+            data,
+            expires,
             key: partial_parsed_url.decryption_key,
             nonce: partial_parsed_url.nonce,
             password: None,
@@ -235,17 +245,21 @@ impl Component for PastePartial {
             PartialPasteMessage::Password(password) => self.password = Some(password),
         }
 
-        match (self.data.clone(), self.key, self.nonce, self.password) {
-            (Some(data), Some(key), Some(nonce), Some(password)) if self.needs_pw => {
-                self.parent.callback(move |Nothing| {
-                    Box::new(PasteComplete::new(data.clone(), key, nonce, Some(password)))
-                        as Box<dyn PasteState>
-                });
-            }
-            (Some(data), Some(key), Some(nonce), None) if !self.needs_pw => {
-                self.parent.callback(move |Nothing| {
-                    Box::new(PasteComplete::new(data.clone(), key, nonce, None))
-                        as Box<dyn PasteState>
+        match (self.key, self.nonce, self.password) {
+            (Some(key), Some(nonce), maybe_password)
+                if (self.needs_pw && maybe_password.is_some())
+                    || (!self.needs_pw && maybe_password.is_none()) =>
+            {
+                let data = self.data.clone();
+                let expires = self.expires.clone();
+                self.parent.callback_once(move |Nothing| {
+                    Box::new(PasteComplete::new(
+                        data,
+                        expires,
+                        key,
+                        nonce,
+                        maybe_password,
+                    )) as Box<dyn PasteState>
                 });
             }
             _ => (),
@@ -272,27 +286,31 @@ impl TryFrom<PastePartial> for PasteComplete {
     fn try_from(partial: PastePartial) -> Result<Self, Self::Error> {
         match partial {
             PastePartial {
-                data: Some(data),
+                data,
                 key: Some(key),
+                expires,
                 nonce: Some(nonce),
                 password: Some(password),
                 needs_pw: true,
                 ..
             } => Ok(PasteComplete {
                 data,
+                expires,
                 key,
                 nonce,
                 password: Some(password),
             }),
             PastePartial {
-                data: Some(data),
+                data,
                 key: Some(key),
+                expires,
                 nonce: Some(nonce),
                 needs_pw: false,
                 ..
             } => Ok(PasteComplete {
                 data,
                 key,
+                expires,
                 nonce,
                 password: None,
             }),
@@ -302,9 +320,16 @@ impl TryFrom<PastePartial> for PasteComplete {
 }
 
 impl PasteComplete {
-    fn new(data: Bytes, key: Key, nonce: Nonce, password: Option<Key>) -> Self {
+    fn new(
+        data: Bytes,
+        expires: Option<Expiration>,
+        key: Key,
+        nonce: Nonce,
+        password: Option<Key>,
+    ) -> Self {
         Self {
             data,
+            expires,
             key,
             nonce,
             password,
@@ -323,9 +348,19 @@ impl PasteComplete {
         if let Ok(str) = String::from_utf8(decrypted) {
             html! {
                 <>
-                <pre><code>{str}</code></pre>
+                <header class={"hljs paste banner"}>{
+                    if let Some(expires) = &self.expires {
+                        match expires {
+                            Expiration::BurnAfterReading => "This paste has been burned. You now have the only copy.".to_string(),
+                            Expiration::UnixTime(time) => time.format("This paste will expire on %A, %B %-d, %Y at %T %Z.").to_string(),
+                        }
+                    } else {
+                        "This paste will not expire.".to_string()
+                    }
+                }</header>
+                <pre class={"paste"}><code>{str}</code></pre>
 
-                <script>{ "hljs.highlightAll();" }</script>
+                <script>{"hljs.highlightAll();"}</script>
                 </>
             }
         } else {

@@ -1,14 +1,50 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
   <meta charset="utf-8" />
   <title>Omegaupload</title>
-  <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/highlight.js/11.3.1/styles/github-dark.min.css">
-  <script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/11.3.1/highlight.min.js"></script>
+
+  <link data-trunk rel="copy-file" href="src/Mplus2-Regular.ttf" dest="/" />
+  <link data-trunk rel="copy-file" href="src/MplusCodeLatin-varwidthweight.ttf" dest="/" />
+  <link data-trunk rel="copy-file" href="src/highlight.min.js" dest="/" />
+  <link data-trunk rel="css" href="src/github-dark.min.css" />
+
+  <link rel="preload" href="highlight.min.js" as="script" type="application/javascript">
+  <link rel="preload" href="Mplus2-Regular.ttf" as="font" type="font/ttf" crossorigin>
+  <link rel="preload" href="MplusCodeLatin-varwidthweight.ttf" as="font" type="font/ttf" crossorigin>
+
+  <script src="highlight.min.js"></script>
   <style>
+    @font-face {
+      font-family: "Mplus2 Regular";
+      src: url("./Mplus2-Regular.ttf") format("truetype");
+    }
+
+    @font-face {
+      font-family: "Mplus Code";
+      src: url("./MplusCodeLatin-varwidthweight.ttf") format("truetype");
+    }
+
     body {
+      background-color: #404040;
+    }
+
+    header.banner {
+      font-family: 'Mplus2 Regular', sans-serif;
+    }
+
+    .paste {
+      border-radius: 1em;
       margin: 0;
+      padding: 1em;
+      background-color: #0d1117;
+      box-shadow: 0 0 1em black;
+      margin-bottom: 1em;
+    }
+
+    .hljs {
+      font-family: 'Mplus Code', sans-serif;
     }
   </style>
 </head>
