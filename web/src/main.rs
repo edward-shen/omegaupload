@@ -1,22 +1,21 @@
 use std::convert::TryFrom;
 use std::fmt::Debug;
-use std::rc::Rc;
 use std::str::FromStr;
 
 use anyhow::{anyhow, bail};
+use bytes::Bytes;
 use downcast_rs::{impl_downcast, Downcast};
-use gloo_console::log;
-use http::uri::{Authority, PathAndQuery};
+use http::uri::PathAndQuery;
+use http::{StatusCode, Uri};
 use omegaupload_common::crypto::{open, Key, Nonce};
-use omegaupload_common::{ParsedUrl, PartialParsedUrl};
-use yew::format::{Binary, Nothing};
-use yew::services::fetch::{FetchTask, Request, Response, StatusCode, Uri};
-use yew::services::FetchService;
+use omegaupload_common::PartialParsedUrl;
+use yew::format::Nothing;
 use yew::utils::window;
 use yew::Properties;
 use yew::{html, Component, ComponentLink, Html, ShouldRender};
 use yew_router::router::Router;
 use yew_router::Switch;
+use yewtil::future::LinkFuture;
 
 fn main() {
     yew::start_app::<App>();
@@ -71,8 +70,6 @@ fn render_route(route: Route) -> Html {
 
 struct Paste {
     state: Box<dyn PasteState>,
-    // Need to keep this alive so that the fetch request doesn't get dropped
-    _fetch_handle: Option<FetchTask>,
 }
 
 impl Component for Paste {
@@ -91,18 +88,22 @@ impl Component for Paste {
         };
 
         let link_clone = link.clone();
-
-        let fetch = FetchService::fetch_binary(
-            Request::get(&request_uri).body(Nothing).unwrap(),
-            link.callback_once(move |resp: Response<Binary>| match resp.status() {
-                StatusCode::OK => {
-                    let partial = PastePartial::new(
-                        resp,
-                        url.split_once('#')
-                            .map(|(_, fragment)| PartialParsedUrl::from(fragment))
-                            .unwrap_or_default(),
-                        link_clone,
-                    );
+        link.send_future(async move {
+            match reqwest::get(&request_uri.to_string()).await {
+                Ok(resp) if resp.status() == StatusCode::OK => {
+                    let partial = match resp.bytes().await {
+                        Ok(bytes) => PastePartial::new(
+                            bytes,
+                            url.split_once('#')
+                                .map(|(_, fragment)| PartialParsedUrl::from(fragment))
+                                .unwrap_or_default(),
+                            link_clone,
+                        ),
+                        Err(e) => {
+                            return Box::new(PasteError(anyhow!("Got resp error: {}", e)))
+                                as Box<dyn PasteState>
+                        }
+                    };
 
                     if let Ok(completed) = PasteComplete::try_from(partial.clone()) {
                         Box::new(completed) as Box<dyn PasteState>
@@ -110,22 +111,15 @@ impl Component for Paste {
                         Box::new(partial) as Box<dyn PasteState>
                     }
                 }
-                StatusCode::NOT_FOUND => Box::new(PasteNotFound) as Box<dyn PasteState>,
-                code => {
-                    Box::new(PasteError(anyhow!("Got resp error: {}", code))) as Box<dyn PasteState>
+                Ok(err) => Box::new(PasteError(anyhow!("Got resp error: {}", err.status())))
+                    as Box<dyn PasteState>,
+                Err(err) => {
+                    Box::new(PasteError(anyhow!("Got resp error: {}", err))) as Box<dyn PasteState>
                 }
-            }),
-        );
-
-        match fetch {
-            Ok(task) => Self {
-                state: Box::new(PasteLoading),
-                _fetch_handle: Some(task),
-            },
-            Err(e) => Self {
-                state: Box::new(PasteError(e)) as Box<dyn PasteState>,
-                _fetch_handle: None,
-            },
+            }
+        });
+        Self {
+            state: Box::new(PasteLoading),
         }
     }
 
@@ -179,7 +173,7 @@ struct PasteError(anyhow::Error);
 #[derive(Properties, Clone, Debug)]
 struct PastePartial {
     parent: ComponentLink<Paste>,
-    data: Option<Rc<Vec<u8>>>,
+    data: Option<Bytes>,
     key: Option<Key>,
     nonce: Option<Nonce>,
     password: Option<Key>,
@@ -188,7 +182,7 @@ struct PastePartial {
 
 #[derive(Properties, Clone)]
 struct PasteComplete {
-    data: Rc<Vec<u8>>,
+    data: Bytes,
     key: Key,
     nonce: Nonce,
     password: Option<Key>,
@@ -204,13 +198,13 @@ impl PasteState for PasteComplete {}
 
 impl PastePartial {
     fn new(
-        resp: Response<Binary>,
+        resp: Bytes,
         partial_parsed_url: PartialParsedUrl,
         parent: ComponentLink<Paste>,
     ) -> Self {
         Self {
             parent,
-            data: Some(Rc::new(resp.into_body().unwrap())),
+            data: Some(resp),
             key: partial_parsed_url.decryption_key,
             nonce: partial_parsed_url.nonce,
             password: None,
@@ -244,17 +238,13 @@ impl Component for PastePartial {
         match (self.data.clone(), self.key, self.nonce, self.password) {
             (Some(data), Some(key), Some(nonce), Some(password)) if self.needs_pw => {
                 self.parent.callback(move |Nothing| {
-                    Box::new(PasteComplete::new(
-                        Rc::clone(&data),
-                        key,
-                        nonce,
-                        Some(password),
-                    )) as Box<dyn PasteState>
+                    Box::new(PasteComplete::new(data.clone(), key, nonce, Some(password)))
+                        as Box<dyn PasteState>
                 });
             }
             (Some(data), Some(key), Some(nonce), None) if !self.needs_pw => {
                 self.parent.callback(move |Nothing| {
-                    Box::new(PasteComplete::new(Rc::clone(&data), key, nonce, None))
+                    Box::new(PasteComplete::new(data.clone(), key, nonce, None))
                         as Box<dyn PasteState>
                 });
             }
@@ -312,7 +302,7 @@ impl TryFrom<PastePartial> for PasteComplete {
 }
 
 impl PasteComplete {
-    fn new(data: Rc<Vec<u8>>, key: Key, nonce: Nonce, password: Option<Key>) -> Self {
+    fn new(data: Bytes, key: Key, nonce: Nonce, password: Option<Key>) -> Self {
         Self {
             data,
             key,
