@@ -1,6 +1,4 @@
-use std::convert::{TryFrom, TryInto};
 use std::fmt::Debug;
-use std::iter::FromIterator;
 
 use rand::prelude::Distribution;
 use serde::de::{Unexpected, Visitor};
@@ -125,6 +123,7 @@ impl<const N: usize> Distribution<ShortCode<N>> for Generator {
         for c in arr.iter_mut() {
             *c = self.sample(rng);
         }
+
         ShortCode(arr)
     }
 }

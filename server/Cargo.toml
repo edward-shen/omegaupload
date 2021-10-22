@@ -1,11 +1,12 @@
 [package]
 name = "omegaupload-server"
 version = "0.1.0"
-edition = "2018"
+edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+omegaupload-common = { path = "../common" }
 anyhow = "1"
 axum = { version = "0.2", features = ["http2", "headers"] }
 bincode = "1"
@@ -15,7 +16,6 @@ bytes = { version = "*", features = ["serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 # We just need to pull in whatever axum is pulling in
 headers = "*"
-lazy_static = "1"
 rand = "0.8"
 rocksdb = { version = "0.17", default_features = false, features = ["zstd"] }
 serde = { version = "1", features = ["derive"] }

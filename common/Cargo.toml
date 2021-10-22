@@ -1,15 +1,20 @@
 [package]
 name = "omegaupload-common"
 version = "0.1.0"
-edition = "2018"
+edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 anyhow = "1"
 base64 = "0.13"
+bytes = { version = "*", features = ["serde"] }
 chacha20poly1305 = "0.9"
+chrono = { version = "0.4", features = ["serde"] }
+headers = "*"
+lazy_static = "1"
 rand = "0.8"
+serde = { version = "1", features = ["derive"] }
 sha2 = "0.9"
 thiserror = "1"
 url = "2"

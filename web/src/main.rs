@@ -1,4 +1,5 @@
-use std::convert::TryFrom;
+#![warn(clippy::nursery, clippy::pedantic)]
+
 use std::fmt::Debug;
 use std::str::FromStr;
 
@@ -54,6 +55,7 @@ enum Route {
     Path(String),
 }
 
+#[allow(clippy::needless_pass_by_value)]
 fn render_route(route: Route) -> Html {
     match route {
         Route::Index => html! {
@@ -82,9 +84,9 @@ impl Component for Paste {
         let url = String::from(window().location().to_string());
         let request_uri = {
             let mut uri_parts = url.parse::<Uri>().unwrap().into_parts();
-            uri_parts.path_and_query.as_mut().map(|parts| {
-                *parts = PathAndQuery::from_str(&format!("/api{}", parts.path())).unwrap()
-            });
+            if let Some(parts) = uri_parts.path_and_query.as_mut() {
+                *parts = PathAndQuery::from_str(&format!("/api{}", parts.path())).unwrap();
+            }
             Uri::from_parts(uri_parts).unwrap()
         };
 
@@ -100,13 +102,13 @@ impl Component for Paste {
                         Ok(bytes) => PastePartial::new(
                             bytes,
                             expires,
-                            url.split_once('#')
+                            &url.split_once('#')
                                 .map(|(_, fragment)| PartialParsedUrl::from(fragment))
                                 .unwrap_or_default(),
                             link_clone,
                         ),
                         Err(e) => {
-                            return Box::new(PasteError(anyhow!("Got resp error: {}", e)))
+                            return Box::new(PasteError(anyhow!("Got {}.", e)))
                                 as Box<dyn PasteState>
                         }
                     };
@@ -117,11 +119,16 @@ impl Component for Paste {
                         Box::new(partial) as Box<dyn PasteState>
                     }
                 }
-                Ok(err) => Box::new(PasteError(anyhow!("Got resp error: {}", err.status())))
-                    as Box<dyn PasteState>,
-                Err(err) => {
-                    Box::new(PasteError(anyhow!("Got resp error: {}", err))) as Box<dyn PasteState>
+                Ok(resp) if resp.status() == StatusCode::NOT_FOUND => {
+                    Box::new(PasteNotFound) as Box<dyn PasteState>
                 }
+                Ok(resp) if resp.status() == StatusCode::BAD_REQUEST => {
+                    Box::new(PasteBadRequest) as Box<dyn PasteState>
+                }
+                Ok(err) => {
+                    Box::new(PasteError(anyhow!("Got {}.", err.status()))) as Box<dyn PasteState>
+                }
+                Err(err) => Box::new(PasteError(anyhow!("Got {}.", err))) as Box<dyn PasteState>,
             }
         });
         Self {
@@ -147,13 +154,23 @@ impl Component for Paste {
 
         if self.state.is::<PasteNotFound>() {
             return html! {
-                <p>{ "Either the paste has been burned or one never existed." }</p>
+                <section class={"hljs error"}>
+                    <p>{ "Either the paste has been burned or one never existed." }</p>
+                </section>
+            };
+        }
+
+        if self.state.is::<PasteBadRequest>() {
+            return html! {
+                <section class={"hljs error"}>
+                    <p>{ "Bad Request. Is this a valid paste URL?" }</p>
+                </section>
             };
         }
 
         if let Some(error) = self.state.downcast_ref::<PasteError>() {
             return html! {
-                <p>{ error.0.to_string() }</p>
+                <section class={"hljs error"}><p>{ error.0.to_string() }</p></section>
             };
         }
 
@@ -170,9 +187,6 @@ impl Component for Paste {
         }
     }
 }
-
-struct PasteLoading;
-struct PasteNotFound;
 
 struct PasteError(anyhow::Error);
 
@@ -198,17 +212,29 @@ struct PasteComplete {
 
 trait PasteState: Downcast {}
 impl_downcast!(PasteState);
-impl PasteState for PasteLoading {}
-impl PasteState for PasteNotFound {}
+
 impl PasteState for PasteError {}
 impl PasteState for PastePartial {}
 impl PasteState for PasteComplete {}
+
+macro_rules! impl_paste_type_state {
+    (
+        $($state:ident),* $(,)?
+    ) => {
+        $(
+            struct $state;
+            impl PasteState for $state {}
+        )*
+    };
+}
+
+impl_paste_type_state!(PasteLoading, PasteNotFound, PasteBadRequest);
 
 impl PastePartial {
     fn new(
         data: Bytes,
         expires: Option<Expiration>,
-        partial_parsed_url: PartialParsedUrl,
+        partial_parsed_url: &PartialParsedUrl,
         parent: ComponentLink<Paste>,
     ) -> Self {
         Self {
@@ -251,7 +277,7 @@ impl Component for PastePartial {
                     || (!self.needs_pw && maybe_password.is_none()) =>
             {
                 let data = self.data.clone();
-                let expires = self.expires.clone();
+                let expires = self.expires;
                 self.parent.callback_once(move |Nothing| {
                     Box::new(PasteComplete::new(
                         data,
@@ -265,7 +291,8 @@ impl Component for PastePartial {
             _ => (),
         }
 
-        // parent should re-render so this element should be dropped.
+        // parent should re-render so this element should be dropped; no point
+        // in saying this needs to be re-rendered.
         false
     }
 
@@ -293,7 +320,7 @@ impl TryFrom<PastePartial> for PasteComplete {
                 password: Some(password),
                 needs_pw: true,
                 ..
-            } => Ok(PasteComplete {
+            } => Ok(Self {
                 data,
                 expires,
                 key,
@@ -307,7 +334,7 @@ impl TryFrom<PastePartial> for PasteComplete {
                 nonce: Some(nonce),
                 needs_pw: false,
                 ..
-            } => Ok(PasteComplete {
+            } => Ok(Self {
                 data,
                 key,
                 expires,
@@ -337,30 +364,31 @@ impl PasteComplete {
     }
 
     fn view(&self) -> Html {
-        let stage_one = if let Some(password) = self.password {
-            open(&self.data, &self.nonce.increment(), &password).unwrap()
-        } else {
-            self.data.to_vec()
-        };
-
+        let stage_one = self.password.map_or_else(
+            || self.data.to_vec(),
+            |password| open(&self.data, &self.nonce.increment(), &password).unwrap(),
+        );
         let decrypted = open(&stage_one, &self.nonce, &self.key).unwrap();
 
         if let Ok(str) = String::from_utf8(decrypted) {
             html! {
                 <>
-                <header class={"hljs paste banner"}>{
-                    if let Some(expires) = &self.expires {
-                        match expires {
-                            Expiration::BurnAfterReading => "This paste has been burned. You now have the only copy.".to_string(),
-                            Expiration::UnixTime(time) => time.format("This paste will expire on %A, %B %-d, %Y at %T %Z.").to_string(),
-                        }
-                    } else {
-                        "This paste will not expire.".to_string()
+                <pre class={"paste"}>
+                    <header class={"hljs"}>
+                    {
+                        self.expires.as_ref().map(ToString::to_string).unwrap_or_else(||
+                            "This paste will not expire.".to_string()
+                        )
                     }
-                }</header>
-                <pre class={"paste"}><code>{str}</code></pre>
+                    </header>
+                    <hr class={"hljs"} />
+                    <code>{str}</code>
+                </pre>
 
-                <script>{"hljs.highlightAll();"}</script>
+                <script>{"
+                    hljs.highlightAll();
+                    hljs.initLineNumbersOnLoad();
+                "}</script>
                 </>
             }
         } else {

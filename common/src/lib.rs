@@ -1,10 +1,15 @@
 #![warn(clippy::nursery, clippy::pedantic)]
-#![deny(unsafe_code)]
 
 //! Contains common functions and structures used by multiple projects
 
+use std::fmt::Display;
 use std::str::FromStr;
 
+use bytes::Bytes;
+use chrono::{DateTime, Duration, Utc};
+use headers::{Header, HeaderName, HeaderValue};
+use lazy_static::lazy_static;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 pub use url::Url;
@@ -94,7 +99,9 @@ pub mod crypto {
     impl Nonce {
         #[must_use]
         pub fn increment(&self) -> Self {
-            todo!()
+            let mut inner = self.0;
+            inner.as_mut_slice()[0] += 1;
+            Self(inner)
         }
 
         #[must_use]
@@ -136,9 +143,7 @@ impl From<&str> for PartialParsedUrl {
         for (key, value) in args {
             match (key, value) {
                 ("key", Some(value)) => {
-                    decryption_key = base64::decode(value)
-                        .map(|k| Key::from_slice(&k).clone())
-                        .ok();
+                    decryption_key = base64::decode(value).map(|k| *Key::from_slice(&k)).ok();
                 }
                 ("pw", _) => {
                     needs_password = true;
@@ -201,5 +206,98 @@ impl FromStr for ParsedUrl {
             needs_password,
             nonce,
         })
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug)]
+pub enum Expiration {
+    BurnAfterReading,
+    UnixTime(DateTime<Utc>),
+}
+
+impl Display for Expiration {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Expiration::BurnAfterReading => {
+                write!(f, "This paste has been burned. You now have the only copy.")
+            }
+            Expiration::UnixTime(time) => write!(
+                f,
+                "{}",
+                time.format("This paste will expire on %A, %B %-d, %Y at %T %Z.")
+            ),
+        }
+    }
+}
+
+lazy_static! {
+    pub static ref EXPIRATION_HEADER_NAME: HeaderName = HeaderName::from_static("burn-after");
+}
+
+impl Header for Expiration {
+    fn name() -> &'static HeaderName {
+        &*EXPIRATION_HEADER_NAME
+    }
+
+    fn decode<'i, I>(values: &mut I) -> Result<Self, headers::Error>
+    where
+        Self: Sized,
+        I: Iterator<Item = &'i HeaderValue>,
+    {
+        match values
+            .next()
+            .ok_or_else(headers::Error::invalid)?
+            .as_bytes()
+        {
+            b"read" => Ok(Self::BurnAfterReading),
+            b"5m" => Ok(Self::UnixTime(Utc::now() + Duration::minutes(5))),
+            b"10m" => Ok(Self::UnixTime(Utc::now() + Duration::minutes(10))),
+            b"1h" => Ok(Self::UnixTime(Utc::now() + Duration::hours(1))),
+            b"1d" => Ok(Self::UnixTime(Utc::now() + Duration::days(1))),
+            // We disallow permanent pastes
+            _ => Err(headers::Error::invalid()),
+        }
+    }
+
+    fn encode<E: Extend<HeaderValue>>(&self, container: &mut E) {
+        container.extend(std::iter::once(self.into()));
+    }
+}
+
+impl From<&Expiration> for HeaderValue {
+    fn from(expiration: &Expiration) -> Self {
+        unsafe {
+            Self::from_maybe_shared_unchecked(match expiration {
+                Expiration::BurnAfterReading => Bytes::from_static(b"0"),
+                Expiration::UnixTime(duration) => Bytes::from(duration.to_rfc3339()),
+            })
+        }
+    }
+}
+
+impl From<Expiration> for HeaderValue {
+    fn from(expiration: Expiration) -> Self {
+        (&expiration).into()
+    }
+}
+
+pub struct ParseHeaderValueError;
+
+impl TryFrom<&HeaderValue> for Expiration {
+    type Error = ParseHeaderValueError;
+
+    fn try_from(value: &HeaderValue) -> Result<Self, Self::Error> {
+        value
+            .to_str()
+            .map_err(|_| ParseHeaderValueError)?
+            .parse::<DateTime<Utc>>()
+            .map_err(|_| ParseHeaderValueError)
+            .map(Self::UnixTime)
+    }
+}
+
+impl Default for Expiration {
+    fn default() -> Self {
+        Self::UnixTime(Utc::now() + Duration::days(1))
     }
 }

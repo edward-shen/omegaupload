@@ -7,8 +7,9 @@ use anyhow::{anyhow, bail, Context, Result};
 use atty::Stream;
 use clap::Clap;
 use omegaupload_common::crypto::{gen_key_nonce, open, seal, Key};
-use omegaupload_common::{base64, hash, ParsedUrl, Url};
+use omegaupload_common::{base64, hash, Expiration, ParsedUrl, Url};
 use reqwest::blocking::Client;
+use reqwest::header::EXPIRES;
 use reqwest::StatusCode;
 use secrecy::{ExposeSecret, SecretString};
 
@@ -108,6 +109,13 @@ fn handle_download(url: ParsedUrl) -> Result<()> {
         bail!("Got bad response from server: {}", res.status());
     }
 
+    let expiration_text = dbg!(res.headers())
+        .get(EXPIRES)
+        .and_then(|v| Expiration::try_from(v).ok())
+        .as_ref()
+        .map(ToString::to_string)
+        .unwrap_or_else(|| "This paste will not expire.".to_string());
+
     let mut data = res.bytes()?.as_ref().to_vec();
 
     if url.needs_password {
@@ -139,6 +147,8 @@ fn handle_download(url: ParsedUrl) -> Result<()> {
     } else {
         std::io::stdout().write_all(&data)?;
     }
+
+    eprintln!("{}", expiration_text);
 
     Ok(())
 }

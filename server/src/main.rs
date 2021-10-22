@@ -1,6 +1,5 @@
 #![warn(clippy::nursery, clippy::pedantic)]
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -10,18 +9,18 @@ use axum::handler::{get, post};
 use axum::http::header::EXPIRES;
 use axum::http::StatusCode;
 use axum::{AddExtensionLayer, Router};
-use chrono::Duration;
+use chrono::Utc;
 use headers::HeaderMap;
+use omegaupload_common::Expiration;
 use rand::thread_rng;
 use rand::Rng;
 use rocksdb::IteratorMode;
-use rocksdb::WriteBatch;
 use rocksdb::{Options, DB};
 use tokio::task;
-use tracing::warn;
 use tracing::{error, instrument};
+use tracing::{info, warn};
 
-use crate::paste::{Expiration, Paste};
+use crate::paste::Paste;
 use crate::short_code::ShortCode;
 
 mod paste;
@@ -36,8 +35,7 @@ async fn main() -> Result<()> {
 
     let db = Arc::new(DB::open_default(DB_PATH)?);
 
-    let stop_signal = Arc::new(AtomicBool::new(false));
-    task::spawn(cleanup(Arc::clone(&stop_signal), Arc::clone(&db)));
+    set_up_expirations(Arc::clone(&db));
 
     axum::Server::bind(&"0.0.0.0:8081".parse()?)
         .serve(
@@ -52,10 +50,63 @@ async fn main() -> Result<()> {
         )
         .await?;
 
-    stop_signal.store(true, Ordering::Release);
     // Must be called for correct shutdown
     DB::destroy(&Options::default(), DB_PATH)?;
     Ok(())
+}
+
+fn set_up_expirations(db: Arc<DB>) {
+    let mut corrupted = 0;
+    let mut expired = 0;
+    let mut pending = 0;
+    let mut permanent = 0;
+
+    info!("Setting up cleanup timers, please wait...");
+
+    for (key, value) in db.iterator(IteratorMode::Start) {
+        let paste = if let Ok(value) = bincode::deserialize::<Paste>(&value) {
+            value
+        } else {
+            corrupted += 1;
+            if let Err(e) = db.delete(key) {
+                warn!("{}", e);
+            }
+            continue;
+        };
+        if let Some(Expiration::UnixTime(time)) = paste.expiration {
+            let now = Utc::now();
+
+            if time < now {
+                expired += 1;
+                if let Err(e) = db.delete(key) {
+                    warn!("{}", e);
+                }
+            } else {
+                let sleep_duration = (time - now).to_std().unwrap();
+                pending += 1;
+
+                let db_ref = Arc::clone(&db);
+                task::spawn_blocking(move || async move {
+                    tokio::time::sleep(sleep_duration).await;
+                    if let Err(e) = db_ref.delete(key) {
+                        warn!("{}", e);
+                    }
+                });
+            }
+        } else {
+            permanent += 1;
+        }
+    }
+
+    if corrupted == 0 {
+        info!("No corrupted pastes found.");
+    } else {
+        warn!("Found {} corrupted pastes.", corrupted);
+    }
+    info!("Found {} expired pastes.", expired);
+    info!("Found {} active pastes.", pending);
+    info!("Found {} permanent pastes.", permanent);
+    info!("Cleanup timers have been initialized.");
 }
 
 #[instrument(skip(db), err)]
@@ -102,8 +153,30 @@ async fn upload<const N: usize>(
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
     };
 
-    match task::spawn_blocking(move || db.put(key, value)).await {
-        Ok(Ok(_)) => (),
+    let db_ref = Arc::clone(&db);
+    match task::spawn_blocking(move || db_ref.put(key, value)).await {
+        Ok(Ok(_)) => {
+            if let Some(expires) = maybe_expires {
+                if let Expiration::UnixTime(time) = expires.0 {
+                    let now = Utc::now();
+
+                    if time < now {
+                        if let Err(e) = db.delete(key) {
+                            warn!("{}", e);
+                        }
+                    } else {
+                        let sleep_duration = (time - now).to_std().unwrap();
+
+                        task::spawn_blocking(move || async move {
+                            tokio::time::sleep(sleep_duration).await;
+                            if let Err(e) = db.delete(key) {
+                                warn!("{}", e);
+                            }
+                        });
+                    }
+                }
+            }
+        }
         e => {
             error!("Failed to insert paste into db: {:?}", e);
             return Err(StatusCode::INTERNAL_SERVER_ERROR);
@@ -183,49 +256,5 @@ async fn delete<const N: usize>(
     match task::spawn_blocking(move || db.delete(url.as_bytes())).await {
         Ok(Ok(_)) => StatusCode::OK,
         _ => StatusCode::INTERNAL_SERVER_ERROR,
-    }
-}
-
-/// Periodic clean-up task that deletes expired entries.
-async fn cleanup(stop_signal: Arc<AtomicBool>, db: Arc<DB>) {
-    while !stop_signal.load(Ordering::Acquire) {
-        tokio::time::sleep(Duration::minutes(5).to_std().expect("infallible")).await;
-        let mut batch = WriteBatch::default();
-        for (key, value) in db.snapshot().iterator(IteratorMode::Start) {
-            // TODO: only partially decode struct for max perf
-            let join_handle = task::spawn_blocking(move || {
-                bincode::deserialize::<Paste>(&value)
-                    .as_ref()
-                    .map(Paste::expired)
-                    .unwrap_or_default()
-            })
-            .await;
-
-            let should_delete = match join_handle {
-                Ok(should_delete) => should_delete,
-                Err(e) => {
-                    error!("Failed to join thread?! {}", e);
-                    false
-                }
-            };
-
-            if should_delete {
-                batch.delete(key);
-            }
-        }
-
-        let db = Arc::clone(&db);
-        let join_handle = task::spawn_blocking(move || db.write(batch)).await;
-        let db_op_res = match join_handle {
-            Ok(res) => res,
-            Err(e) => {
-                error!("Failed to join handle?! {}", e);
-                continue;
-            }
-        };
-
-        if let Err(e) = db_op_res {
-            warn!("Failed to cleanup db: {}", e);
-        }
     }
 }
