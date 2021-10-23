@@ -6,7 +6,7 @@ use std::io::{Read, Write};
 use anyhow::{anyhow, bail, Context, Result};
 use atty::Stream;
 use clap::Clap;
-use omegaupload_common::crypto::{gen_key_nonce, open, seal, Key};
+use omegaupload_common::crypto::{gen_key_nonce, open_in_place, seal_in_place, Key};
 use omegaupload_common::{base64, hash, Expiration, ParsedUrl, Url};
 use reqwest::blocking::Client;
 use reqwest::header::EXPIRES;
@@ -53,13 +53,13 @@ fn handle_upload(mut url: Url, password: Option<SecretString>) -> Result<()> {
         let (enc_key, nonce) = gen_key_nonce();
         let mut container = Vec::new();
         std::io::stdin().read_to_end(&mut container)?;
-        let mut enc =
-            seal(&container, &nonce, &enc_key).map_err(|_| anyhow!("Failed to encrypt data"))?;
+        seal_in_place(&mut container, &nonce, &enc_key)
+            .map_err(|_| anyhow!("Failed to encrypt data"))?;
 
         let pw_used = if let Some(password) = password {
             let pw_hash = hash(password.expose_secret().as_bytes());
             let pw_key = Key::from_slice(pw_hash.as_ref());
-            enc = seal(&enc, &nonce.increment(), pw_key)
+            seal_in_place(&mut container, &nonce.increment(), pw_key)
                 .map_err(|_| anyhow!("Failed to encrypt data"))?;
             true
         } else {
@@ -69,7 +69,7 @@ fn handle_upload(mut url: Url, password: Option<SecretString>) -> Result<()> {
         let key = base64::encode(&enc_key);
         let nonce = base64::encode(&nonce);
 
-        (enc, nonce, key, pw_used)
+        (container, nonce, key, pw_used)
     };
 
     let res = Client::new()
@@ -131,11 +131,11 @@ fn handle_download(url: ParsedUrl) -> Result<()> {
         let pw_hash = hash(input.as_bytes());
         let pw_key = Key::from_slice(pw_hash.as_ref());
 
-        data = open(&data, &url.nonce.increment(), pw_key)
+        open_in_place(&mut data, &url.nonce.increment(), pw_key)
             .map_err(|_| anyhow!("Failed to decrypt data. Incorrect password?"))?;
     }
 
-    data = open(&data, &url.nonce, &url.decryption_key)
+    open_in_place(&mut data, &url.nonce, &url.decryption_key)
         .map_err(|_| anyhow!("Failed to decrypt data. Incorrect decryption key?"))?;
 
     if atty::is(Stream::Stdout) {

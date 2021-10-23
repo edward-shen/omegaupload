@@ -1,3 +1,7 @@
+@use '../vendor/highlight.js/src/styles/github-dark.css';
+
+$padding: 1em;
+
 @font-face {
   font-family: "Mplus Code";
   src: url("./MplusCodeLatin[wdth,wght].ttf") format("truetype");
@@ -5,17 +9,16 @@
 
 body {
   background-color: #404040;
-  font-family: 'Mplus Code', sans-serif;
   margin: 0;
 }
 
-pre header {
-  user-select: none;
-  margin: 1em;
+.unselectable {
+    user-select: none;
 }
 
 hr {
-  margin: 1em;
+  @extend .hljs;
+  margin: $padding 0;
 }
 
 main {
@@ -25,11 +28,11 @@ main {
 }
 
 .paste {
-  border-radius: 1em;
-  margin: 1em;
-  padding: 1em;
-  background-color: #0d1117;
-  box-shadow: 0 0 1em black;
+  @extend .hljs;
+  border-radius: $padding;
+  margin: $padding;
+  padding: 2 * $padding;
+  box-shadow: 0 0 $padding black;
   min-width: 120ch;
 }
 
@@ -39,17 +42,20 @@ main {
 
 .hljs-ln td.hljs-ln-numbers {
   text-align: right;
-  padding-right: 1em;
+  padding-right: $padding;
 }
 
 .centered {
-  height: 100vh;
-  width: 100vw;
-  margin: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+}
+
+.fullscreen {
+  min-height: 100vh;
+  min-width: 100vw;
+  margin: 0;
 }
 
 .display-anyways {
@@ -59,15 +65,11 @@ main {
 
 img {
   margin-bottom: 4em;
+  max-height: 75vh;
+  max-width: 75vw;
+  border-radius: $padding;
 }
 
 .primary {
-  background-color: #0d1117;
-}
-
-.image {
-  display: block;
-
-  a {
-  }
+  @extend .hljs;
 }

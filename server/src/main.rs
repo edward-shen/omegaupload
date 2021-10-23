@@ -17,7 +17,7 @@ use rand::Rng;
 use rocksdb::IteratorMode;
 use rocksdb::{Options, DB};
 use tokio::task;
-use tracing::{error, instrument};
+use tracing::{error, instrument, trace};
 use tracing::{info, warn};
 
 use crate::paste::Paste;
@@ -109,7 +109,7 @@ fn set_up_expirations(db: Arc<DB>) {
     info!("Cleanup timers have been initialized.");
 }
 
-#[instrument(skip(db), err)]
+#[instrument(skip(db, body), err)]
 async fn upload<const N: usize>(
     Extension(db): Extension<Arc<DB>>,
     maybe_expires: Option<TypedHeader<Expiration>>,
@@ -127,31 +127,38 @@ async fn upload<const N: usize>(
     let paste = Paste::new(maybe_expires.map(|v| v.0).unwrap_or_default(), body);
     let mut new_key = None;
 
+    trace!("Generating short code...");
+
     // Try finding a code; give up after 1000 attempts
     // Statistics show that this is very unlikely to happen
-    for _ in 0..1000 {
+    for i in 0..1000 {
         let code: ShortCode<N> = thread_rng().sample(short_code::Generator);
         let db = Arc::clone(&db);
         let key = code.as_bytes();
         let query = task::spawn_blocking(move || db.key_may_exist(key)).await;
         if matches!(query, Ok(false)) {
             new_key = Some(key);
+            trace!("Found new key after {} attempts.", i);
+            break;
         }
     }
 
     let key = if let Some(key) = new_key {
         key
     } else {
-        error!("Failed to generate a valid shortcode");
+        error!("Failed to generate a valid short code!");
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
     };
 
+    trace!("Serializing paste...");
     let value = if let Ok(v) = bincode::serialize(&paste) {
         v
     } else {
         error!("Failed to serialize paste?!");
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
     };
+
+    trace!("Finished serializing paste.");
 
     let db_ref = Arc::clone(&db);
     match task::spawn_blocking(move || db_ref.put(key, value)).await {

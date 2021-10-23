@@ -39,7 +39,7 @@ pub mod crypto {
     use std::ops::{Deref, DerefMut};
 
     use chacha20poly1305::aead::generic_array::GenericArray;
-    use chacha20poly1305::aead::{Aead, Error, NewAead};
+    use chacha20poly1305::aead::{Aead, AeadInPlace, Buffer, Error, NewAead};
     use chacha20poly1305::XChaCha20Poly1305;
     use chacha20poly1305::XNonce;
     use rand::{thread_rng, Rng};
@@ -62,9 +62,19 @@ pub mod crypto {
         cipher.encrypt(nonce, plaintext)
     }
 
+    pub fn seal_in_place(buffer: &mut impl Buffer, nonce: &Nonce, key: &Key) -> Result<(), Error> {
+        let cipher = XChaCha20Poly1305::new(key);
+        cipher.encrypt_in_place(nonce, &[], buffer)
+    }
+
     pub fn open(encrypted: &[u8], nonce: &Nonce, key: &Key) -> Result<Vec<u8>, Error> {
         let cipher = XChaCha20Poly1305::new(key);
         cipher.decrypt(nonce, encrypted)
+    }
+
+    pub fn open_in_place(buffer: &mut impl Buffer, nonce: &Nonce, key: &Key) -> Result<(), Error> {
+        let cipher = XChaCha20Poly1305::new(key);
+        cipher.decrypt_in_place(nonce, &[], buffer)
     }
 
     #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -291,7 +301,16 @@ impl TryFrom<&HeaderValue> for Expiration {
     fn try_from(value: &HeaderValue) -> Result<Self, Self::Error> {
         value
             .to_str()
-            .map_err(|_| ParseHeaderValueError)?
+            .map_err(|_| ParseHeaderValueError)
+            .and_then(Self::try_from)
+    }
+}
+
+impl TryFrom<&str> for Expiration {
+    type Error = ParseHeaderValueError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        value
             .parse::<DateTime<Utc>>()
             .map_err(|_| ParseHeaderValueError)
             .map(Self::UnixTime)

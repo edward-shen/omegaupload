@@ -2,27 +2,38 @@
 
 use std::fmt::{Debug, Display, Formatter};
 use std::str::FromStr;
+use std::sync::Arc;
 
 use anyhow::{anyhow, bail, Context};
+use byte_unit::Byte;
 use bytes::Bytes;
+use decrypt::DecryptionAgent;
 use downcast_rs::{impl_downcast, Downcast};
 use gloo_console::log;
 use http::header::EXPIRES;
 use http::uri::PathAndQuery;
 use http::{StatusCode, Uri};
+use image::GenericImageView;
 use js_sys::{Array, ArrayBuffer, Uint8Array};
-use omegaupload_common::crypto::{open, Key, Nonce};
+use omegaupload_common::crypto::{open, open_in_place, Key, Nonce};
 use omegaupload_common::{Expiration, PartialParsedUrl};
+use reqwasm::http::Request;
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::TextDecoder;
 use web_sys::{Blob, Url};
+use yew::agent::Dispatcher;
 use yew::utils::window;
-use yew::Properties;
-use yew::{html, Component, ComponentLink, Html, ShouldRender};
+use yew::worker::Agent;
+use yew::{html, Bridge, Bridged, Component, ComponentLink, Html, ShouldRender};
+use yew::{Dispatched, Properties};
 use yew_router::router::Router;
 use yew_router::Switch;
 use yewtil::future::LinkFuture;
+
+use crate::decrypt::{DecryptionAgentMessage, DecryptionParams, PasteContext};
+
+mod decrypt;
 
 fn main() {
     yew::start_app::<App>();
@@ -76,8 +87,9 @@ fn render_route(route: Route) -> Html {
     }
 }
 
-struct Paste {
+pub struct Paste {
     state: Box<dyn PasteState>,
+    _listener: Box<dyn Bridge<DecryptionAgent>>,
 }
 
 impl Component for Paste {
@@ -95,20 +107,38 @@ impl Component for Paste {
             Uri::from_parts(uri_parts).unwrap()
         };
 
+        let handle_decryption_result = |res: <DecryptionAgent as Agent>::Output| {
+            log!("Got decryption result back!");
+            match res {
+                Ok((decrypted, context)) => {
+                    Box::new(PasteComplete::new(context.link, decrypted, context.expires))
+                        as Box<dyn PasteState>
+                }
+                Err(e) => Box::new(PasteError(anyhow!("wtf"))) as Box<dyn PasteState>,
+            }
+        };
+
+        let listener = DecryptionAgent::bridge(link.callback(handle_decryption_result));
+
         let link_clone = link.clone();
         link.send_future(async move {
-            match reqwest::get(&request_uri.to_string()).await {
+            match Request::get(&request_uri.to_string()).send().await {
                 Ok(resp) if resp.status() == StatusCode::OK => {
                     let expires = resp
                         .headers()
-                        .get(EXPIRES)
+                        .get(EXPIRES.as_str())
+                        .ok()
+                        .flatten()
+                        .as_deref()
                         .and_then(|v| Expiration::try_from(v).ok());
-                    let bytes = match resp.bytes().await {
-                        Ok(bytes) => bytes,
-                        Err(e) => {
-                            return Box::new(PasteError(anyhow!("Got {}.", e)))
-                                as Box<dyn PasteState>
-                        }
+
+                    let data = {
+                        Uint8Array::new(
+                            &JsFuture::from(resp.as_raw().array_buffer().unwrap())
+                                .await
+                                .unwrap(),
+                        )
+                        .to_vec()
                     };
 
                     let info = url
@@ -118,13 +148,12 @@ impl Component for Paste {
                     let key = info.decryption_key.unwrap();
                     let nonce = info.nonce.unwrap();
 
-                    if let Ok(completed) = decrypt(bytes, key, nonce, None) {
-                        Box::new(PasteComplete::new(link_clone, completed, expires))
-                            as Box<dyn PasteState>
-                    } else {
-                        todo!()
-                        // Box::new(partial) as Box<dyn PasteState>
-                    }
+                    let mut decryption_agent = DecryptionAgent::dispatcher();
+
+                    let params = DecryptionParams::new(data, key, nonce, None);
+                    let ctx = PasteContext::new(link_clone, expires);
+                    decryption_agent.send(DecryptionAgentMessage::new(ctx, params));
+                    Box::new(PasteDecrypting(decryption_agent)) as Box<dyn PasteState>
                 }
                 Ok(resp) if resp.status() == StatusCode::NOT_FOUND => {
                     Box::new(PasteNotFound) as Box<dyn PasteState>
@@ -138,8 +167,10 @@ impl Component for Paste {
                 Err(err) => Box::new(PasteError(anyhow!("Got {}.", err))) as Box<dyn PasteState>,
             }
         });
+
         Self {
             state: Box::new(PasteLoading),
+            _listener: listener,
         }
     }
 
@@ -156,6 +187,12 @@ impl Component for Paste {
         if self.state.is::<PasteLoading>() {
             return html! {
                 <p>{ "loading" }</p>
+            };
+        }
+
+        if self.state.is::<PasteDecrypting>() {
+            return html! {
+                "decrypting"
             };
         }
 
@@ -197,9 +234,10 @@ impl Component for Paste {
 
 struct PasteError(anyhow::Error);
 
-#[derive(Properties, Clone, Debug)]
+#[derive(Debug)]
 struct PastePartial {
     parent: ComponentLink<Paste>,
+    dispatcher: Dispatcher<DecryptionAgent>,
     data: Bytes,
     expires: Option<Expiration>,
     key: Option<Key>,
@@ -216,13 +254,13 @@ struct PasteComplete {
 }
 
 #[derive(Clone)]
-enum DecryptedData {
-    String(String),
-    Blob(Blob),
-    Image(Blob),
+pub enum DecryptedData {
+    String(Arc<String>),
+    Blob(Arc<Blob>),
+    Image(Arc<Blob>, (u32, u32), usize),
 }
 
-trait PasteState: Downcast {}
+pub trait PasteState: Downcast {}
 impl_downcast!(PasteState);
 
 impl PasteState for PasteError {}
@@ -242,6 +280,10 @@ macro_rules! impl_paste_type_state {
 
 impl_paste_type_state!(PasteLoading, PasteNotFound, PasteBadRequest);
 
+struct PasteDecrypting(Dispatcher<DecryptionAgent>);
+
+impl PasteState for PasteDecrypting {}
+
 impl PastePartial {
     fn new(
         data: Bytes,
@@ -251,6 +293,7 @@ impl PastePartial {
     ) -> Self {
         Self {
             parent,
+            dispatcher: DecryptionAgent::dispatcher(),
             data,
             expires,
             key: partial_parsed_url.decryption_key,
@@ -270,10 +313,10 @@ enum PartialPasteMessage {
 impl Component for PastePartial {
     type Message = PartialPasteMessage;
 
-    type Properties = Self;
+    type Properties = ();
 
-    fn create(props: Self::Properties, _: ComponentLink<Self>) -> Self {
-        props
+    fn create(_: Self::Properties, _: ComponentLink<Self>) -> Self {
+        unimplemented!()
     }
 
     fn update(&mut self, msg: Self::Message) -> ShouldRender {
@@ -289,18 +332,11 @@ impl Component for PastePartial {
                     || (!self.needs_pw && maybe_password.is_none()) =>
             {
                 let parent = self.parent.clone();
-                let data = self.data.clone();
+                let mut data = self.data.to_vec();
                 let expires = self.expires;
 
-                self.parent.send_future(async move {
-                    match decrypt(data, key, nonce, maybe_password) {
-                        Ok(decrypted) => Box::new(PasteComplete::new(parent, decrypted, expires))
-                            as Box<dyn PasteState>,
-                        Err(e) => {
-                            todo!()
-                        }
-                    }
-                });
+                // self.dispatcher.send((data, key, nonce, maybe_password));
+                todo!()
             }
             _ => (),
         }
@@ -321,43 +357,8 @@ impl Component for PastePartial {
     }
 }
 
-fn decrypt(
-    encrypted: Bytes,
-    key: Key,
-    nonce: Nonce,
-    maybe_password: Option<Key>,
-) -> Result<DecryptedData, PasteCompleteConstructionError> {
-    let stage_one = maybe_password.map_or_else(
-        || Ok(encrypted.to_vec()),
-        |password| open(&encrypted, &nonce.increment(), &password),
-    );
-
-    let stage_one = stage_one.map_err(|_| PasteCompleteConstructionError::StageOneFailure)?;
-
-    let stage_two = open(&stage_one, &nonce, &key)
-        .map_err(|_| PasteCompleteConstructionError::StageTwoFailure)?;
-
-    if let Ok(decrypted) = std::str::from_utf8(&stage_two) {
-        Ok(DecryptedData::String(decrypted.to_owned()))
-    } else {
-        let blob_chunks = Array::new_with_length(stage_two.chunks(65536).len().try_into().unwrap());
-        for (i, chunk) in stage_two.chunks(65536).enumerate() {
-            let array = Uint8Array::new_with_length(chunk.len().try_into().unwrap());
-            array.copy_from(&chunk);
-            blob_chunks.set(i.try_into().unwrap(), array.dyn_into().unwrap());
-        }
-        let blob = Blob::new_with_u8_array_sequence(blob_chunks.dyn_ref().unwrap()).unwrap();
-
-        if image::guess_format(&stage_two).is_ok() {
-            Ok(DecryptedData::Image(blob))
-        } else {
-            Ok(DecryptedData::Blob(blob))
-        }
-    }
-}
-
 #[derive(Debug)]
-enum PasteCompleteConstructionError {
+pub enum PasteCompleteConstructionError {
     StageOneFailure,
     StageTwoFailure,
 }
@@ -395,22 +396,24 @@ impl PasteComplete {
             DecryptedData::String(decrypted) => html! {
                     html! {
                         <>
-                        <pre class={"paste"}>
-                            <header class={"hljs"}>
-                            {
-                                self.expires.as_ref().map(ToString::to_string).unwrap_or_else(||
-                                    "This paste will not expire.".to_string()
-                                )
-                            }
-                            </header>
-                            <hr class={"hljs"} />
-                            <code>{decrypted}</code>
-                        </pre>
+                            <pre class="paste">
+                                <header class="unselectable">
+                                {
+                                    self.expires.as_ref().map(ToString::to_string).unwrap_or_else(||
+                                        "This paste will not expire.".to_string()
+                                    )
+                                }
+                                </header>
+                                <hr />
+                                <code>{decrypted}</code>
+                            </pre>
 
-                        <script>{"
-                            hljs.highlightAll();
-                            hljs.initLineNumbersOnLoad();
-                        "}</script>
+                            <script>
+                            {"
+                                hljs.highlightAll();
+                                hljs.initLineNumbersOnLoad();
+                            "}
+                            </script>
                         </>
                     }
             },
@@ -419,11 +422,11 @@ impl PasteComplete {
                 if let Ok(object_url) = object_url {
                     let file_name = window().location().pathname().unwrap_or("file".to_string());
                     let mut cloned = self.clone();
-                    let decrypted_cloned = decrypted.clone();
+                    let decrypted_ref = Arc::clone(&decrypted);
                     let display_anyways_callback =
                         self.parent.callback_future_once(|_| async move {
                             let array_buffer: ArrayBuffer =
-                                JsFuture::from(decrypted_cloned.array_buffer())
+                                JsFuture::from(decrypted_ref.array_buffer())
                                     .await
                                     .unwrap()
                                     .dyn_into()
@@ -431,15 +434,16 @@ impl PasteComplete {
                             let decoder = TextDecoder::new().unwrap();
                             cloned.decrypted = decoder
                                 .decode_with_buffer_source(&array_buffer)
+                                .map(Arc::new)
                                 .map(DecryptedData::String)
                                 .unwrap();
                             Box::new(cloned) as Box<dyn PasteState>
                         });
                     html! {
-                        <section class="hljs centered">
+                        <section class="hljs fullscreen centered">
                             <div class="centered">
                                 <p>{ "Found a binary file." }</p>
-                                <a href={object_url} download=file_name class="hljs-meta">{"Download"}</a>
+                                <a href=object_url download=file_name class="hljs-meta">{"Download"}</a>
                             </div>
                             <p onclick=display_anyways_callback class="display-anyways hljs-meta">{ "Display anyways?" }</p>
                         </section>
@@ -454,21 +458,29 @@ impl PasteComplete {
                     }
                 }
             }
-            DecryptedData::Image(decrypted) => {
+            DecryptedData::Image(decrypted, (width, height), size) => {
                 let object_url = Url::create_object_url_with_blob(decrypted);
                 if let Ok(object_url) = object_url {
                     let file_name = window().location().pathname().unwrap_or("file".to_string());
                     html! {
-                        <section class="centered">
-                            <img src={object_url.clone()} />
-                            <a href={object_url} download=file_name class="hljs-meta">{"Download"}</a>
+                        <section class="hljs fullscreen centered">
+                            <img src=object_url.clone() />
+                            <a href=object_url download=file_name class="hljs-meta">
+                                {
+                                    format!(
+                                        "Download {} \u{2014} {} by {}",
+                                        Byte::from_bytes(*size as u128).get_appropriate_unit(true),
+                                        width, height,
+                                    )
+                                }
+                            </a>
                         </section>
                     }
                 } else {
                     // This branch really shouldn't happen, but might as well
                     // try and give a user-friendly error message.
                     html! {
-                        <section class="hljs centered">
+                        <section class="hljs fullscreen centered">
                             <p>{ "Failed to create an object URL for the decrypted file. Try reloading the page?" }</p>
                         </section>
                     }

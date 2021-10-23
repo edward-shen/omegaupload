@@ -1,0 +1,8 @@
+
+[build]
+target = "web/index.html"
+release = true
+
+[[proxy]]
+backend = "http://localhost:8081"
+rewrite = "/api/"
