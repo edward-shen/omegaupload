@@ -1,17 +1,22 @@
 #![warn(clippy::nursery, clippy::pedantic)]
 
-use std::fmt::Debug;
+use std::fmt::{Debug, Display, Formatter};
 use std::str::FromStr;
 
-use anyhow::{anyhow, bail};
+use anyhow::{anyhow, bail, Context};
 use bytes::Bytes;
 use downcast_rs::{impl_downcast, Downcast};
+use gloo_console::log;
 use http::header::EXPIRES;
 use http::uri::PathAndQuery;
 use http::{StatusCode, Uri};
+use js_sys::{Array, ArrayBuffer, Uint8Array};
 use omegaupload_common::crypto::{open, Key, Nonce};
 use omegaupload_common::{Expiration, PartialParsedUrl};
-use yew::format::Nothing;
+use wasm_bindgen::JsCast;
+use wasm_bindgen_futures::JsFuture;
+use web_sys::TextDecoder;
+use web_sys::{Blob, Url};
 use yew::utils::window;
 use yew::Properties;
 use yew::{html, Component, ComponentLink, Html, ShouldRender};
@@ -98,25 +103,27 @@ impl Component for Paste {
                         .headers()
                         .get(EXPIRES)
                         .and_then(|v| Expiration::try_from(v).ok());
-                    let partial = match resp.bytes().await {
-                        Ok(bytes) => PastePartial::new(
-                            bytes,
-                            expires,
-                            &url.split_once('#')
-                                .map(|(_, fragment)| PartialParsedUrl::from(fragment))
-                                .unwrap_or_default(),
-                            link_clone,
-                        ),
+                    let bytes = match resp.bytes().await {
+                        Ok(bytes) => bytes,
                         Err(e) => {
                             return Box::new(PasteError(anyhow!("Got {}.", e)))
                                 as Box<dyn PasteState>
                         }
                     };
 
-                    if let Ok(completed) = PasteComplete::try_from(partial.clone()) {
-                        Box::new(completed) as Box<dyn PasteState>
+                    let info = url
+                        .split_once('#')
+                        .map(|(_, fragment)| PartialParsedUrl::from(fragment))
+                        .unwrap_or_default();
+                    let key = info.decryption_key.unwrap();
+                    let nonce = info.nonce.unwrap();
+
+                    if let Ok(completed) = decrypt(bytes, key, nonce, None) {
+                        Box::new(PasteComplete::new(link_clone, completed, expires))
+                            as Box<dyn PasteState>
                     } else {
-                        Box::new(partial) as Box<dyn PasteState>
+                        todo!()
+                        // Box::new(partial) as Box<dyn PasteState>
                     }
                 }
                 Ok(resp) if resp.status() == StatusCode::NOT_FOUND => {
@@ -154,7 +161,7 @@ impl Component for Paste {
 
         if self.state.is::<PasteNotFound>() {
             return html! {
-                <section class={"hljs error"}>
+                <section class={"hljs centered"}>
                     <p>{ "Either the paste has been burned or one never existed." }</p>
                 </section>
             };
@@ -162,7 +169,7 @@ impl Component for Paste {
 
         if self.state.is::<PasteBadRequest>() {
             return html! {
-                <section class={"hljs error"}>
+                <section class={"hljs centered"}>
                     <p>{ "Bad Request. Is this a valid paste URL?" }</p>
                 </section>
             };
@@ -170,7 +177,7 @@ impl Component for Paste {
 
         if let Some(error) = self.state.downcast_ref::<PasteError>() {
             return html! {
-                <section class={"hljs error"}><p>{ error.0.to_string() }</p></section>
+                <section class={"hljs centered"}><p>{ error.0.to_string() }</p></section>
             };
         }
 
@@ -203,11 +210,16 @@ struct PastePartial {
 
 #[derive(Properties, Clone)]
 struct PasteComplete {
-    data: Bytes,
+    parent: ComponentLink<Paste>,
+    decrypted: DecryptedData,
     expires: Option<Expiration>,
-    key: Key,
-    nonce: Nonce,
-    password: Option<Key>,
+}
+
+#[derive(Clone)]
+enum DecryptedData {
+    String(String),
+    Blob(Blob),
+    Image(Blob),
 }
 
 trait PasteState: Downcast {}
@@ -276,16 +288,18 @@ impl Component for PastePartial {
                 if (self.needs_pw && maybe_password.is_some())
                     || (!self.needs_pw && maybe_password.is_none()) =>
             {
+                let parent = self.parent.clone();
                 let data = self.data.clone();
                 let expires = self.expires;
-                self.parent.callback_once(move |Nothing| {
-                    Box::new(PasteComplete::new(
-                        data,
-                        expires,
-                        key,
-                        nonce,
-                        maybe_password,
-                    )) as Box<dyn PasteState>
+
+                self.parent.send_future(async move {
+                    match decrypt(data, key, nonce, maybe_password) {
+                        Ok(decrypted) => Box::new(PasteComplete::new(parent, decrypted, expires))
+                            as Box<dyn PasteState>,
+                        Err(e) => {
+                            todo!()
+                        }
+                    }
                 });
             }
             _ => (),
@@ -307,92 +321,159 @@ impl Component for PastePartial {
     }
 }
 
-impl TryFrom<PastePartial> for PasteComplete {
-    type Error = anyhow::Error;
+fn decrypt(
+    encrypted: Bytes,
+    key: Key,
+    nonce: Nonce,
+    maybe_password: Option<Key>,
+) -> Result<DecryptedData, PasteCompleteConstructionError> {
+    let stage_one = maybe_password.map_or_else(
+        || Ok(encrypted.to_vec()),
+        |password| open(&encrypted, &nonce.increment(), &password),
+    );
 
-    fn try_from(partial: PastePartial) -> Result<Self, Self::Error> {
-        match partial {
-            PastePartial {
-                data,
-                key: Some(key),
-                expires,
-                nonce: Some(nonce),
-                password: Some(password),
-                needs_pw: true,
-                ..
-            } => Ok(Self {
-                data,
-                expires,
-                key,
-                nonce,
-                password: Some(password),
-            }),
-            PastePartial {
-                data,
-                key: Some(key),
-                expires,
-                nonce: Some(nonce),
-                needs_pw: false,
-                ..
-            } => Ok(Self {
-                data,
-                key,
-                expires,
-                nonce,
-                password: None,
-            }),
-            _ => bail!("missing field"),
+    let stage_one = stage_one.map_err(|_| PasteCompleteConstructionError::StageOneFailure)?;
+
+    let stage_two = open(&stage_one, &nonce, &key)
+        .map_err(|_| PasteCompleteConstructionError::StageTwoFailure)?;
+
+    if let Ok(decrypted) = std::str::from_utf8(&stage_two) {
+        Ok(DecryptedData::String(decrypted.to_owned()))
+    } else {
+        let blob_chunks = Array::new_with_length(stage_two.chunks(65536).len().try_into().unwrap());
+        for (i, chunk) in stage_two.chunks(65536).enumerate() {
+            let array = Uint8Array::new_with_length(chunk.len().try_into().unwrap());
+            array.copy_from(&chunk);
+            blob_chunks.set(i.try_into().unwrap(), array.dyn_into().unwrap());
+        }
+        let blob = Blob::new_with_u8_array_sequence(blob_chunks.dyn_ref().unwrap()).unwrap();
+
+        if image::guess_format(&stage_two).is_ok() {
+            Ok(DecryptedData::Image(blob))
+        } else {
+            Ok(DecryptedData::Blob(blob))
+        }
+    }
+}
+
+#[derive(Debug)]
+enum PasteCompleteConstructionError {
+    StageOneFailure,
+    StageTwoFailure,
+}
+
+impl std::error::Error for PasteCompleteConstructionError {}
+
+impl Display for PasteCompleteConstructionError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PasteCompleteConstructionError::StageOneFailure => {
+                write!(f, "Failed to decrypt stage one.")
+            }
+            PasteCompleteConstructionError::StageTwoFailure => {
+                write!(f, "Failed to decrypt stage two.")
+            }
         }
     }
 }
 
 impl PasteComplete {
     fn new(
-        data: Bytes,
+        parent: ComponentLink<Paste>,
+        decrypted: DecryptedData,
         expires: Option<Expiration>,
-        key: Key,
-        nonce: Nonce,
-        password: Option<Key>,
     ) -> Self {
         Self {
-            data,
+            parent,
+            decrypted,
             expires,
-            key,
-            nonce,
-            password,
         }
     }
 
     fn view(&self) -> Html {
-        let stage_one = self.password.map_or_else(
-            || self.data.to_vec(),
-            |password| open(&self.data, &self.nonce.increment(), &password).unwrap(),
-        );
-        let decrypted = open(&stage_one, &self.nonce, &self.key).unwrap();
+        match &self.decrypted {
+            DecryptedData::String(decrypted) => html! {
+                    html! {
+                        <>
+                        <pre class={"paste"}>
+                            <header class={"hljs"}>
+                            {
+                                self.expires.as_ref().map(ToString::to_string).unwrap_or_else(||
+                                    "This paste will not expire.".to_string()
+                                )
+                            }
+                            </header>
+                            <hr class={"hljs"} />
+                            <code>{decrypted}</code>
+                        </pre>
 
-        if let Ok(str) = String::from_utf8(decrypted) {
-            html! {
-                <>
-                <pre class={"paste"}>
-                    <header class={"hljs"}>
-                    {
-                        self.expires.as_ref().map(ToString::to_string).unwrap_or_else(||
-                            "This paste will not expire.".to_string()
-                        )
+                        <script>{"
+                            hljs.highlightAll();
+                            hljs.initLineNumbersOnLoad();
+                        "}</script>
+                        </>
                     }
-                    </header>
-                    <hr class={"hljs"} />
-                    <code>{str}</code>
-                </pre>
-
-                <script>{"
-                    hljs.highlightAll();
-                    hljs.initLineNumbersOnLoad();
-                "}</script>
-                </>
+            },
+            DecryptedData::Blob(decrypted) => {
+                let object_url = Url::create_object_url_with_blob(decrypted);
+                if let Ok(object_url) = object_url {
+                    let file_name = window().location().pathname().unwrap_or("file".to_string());
+                    let mut cloned = self.clone();
+                    let decrypted_cloned = decrypted.clone();
+                    let display_anyways_callback =
+                        self.parent.callback_future_once(|_| async move {
+                            let array_buffer: ArrayBuffer =
+                                JsFuture::from(decrypted_cloned.array_buffer())
+                                    .await
+                                    .unwrap()
+                                    .dyn_into()
+                                    .unwrap();
+                            let decoder = TextDecoder::new().unwrap();
+                            cloned.decrypted = decoder
+                                .decode_with_buffer_source(&array_buffer)
+                                .map(DecryptedData::String)
+                                .unwrap();
+                            Box::new(cloned) as Box<dyn PasteState>
+                        });
+                    html! {
+                        <section class="hljs centered">
+                            <div class="centered">
+                                <p>{ "Found a binary file." }</p>
+                                <a href={object_url} download=file_name class="hljs-meta">{"Download"}</a>
+                            </div>
+                            <p onclick=display_anyways_callback class="display-anyways hljs-meta">{ "Display anyways?" }</p>
+                        </section>
+                    }
+                } else {
+                    // This branch really shouldn't happen, but might as well
+                    // try and give a user-friendly error message.
+                    html! {
+                        <section class="hljs centered">
+                            <p>{ "Failed to create an object URL for the decrypted file. Try reloading the page?" }</p>
+                        </section>
+                    }
+                }
             }
-        } else {
-            html! { "binary" }
+            DecryptedData::Image(decrypted) => {
+                let object_url = Url::create_object_url_with_blob(decrypted);
+                if let Ok(object_url) = object_url {
+                    let file_name = window().location().pathname().unwrap_or("file".to_string());
+                    html! {
+                        <section class="centered">
+                            <img src={object_url.clone()} />
+                            <a href={object_url} download=file_name class="hljs-meta">{"Download"}</a>
+                        </section>
+                    }
+                } else {
+                    // This branch really shouldn't happen, but might as well
+                    // try and give a user-friendly error message.
+                    html! {
+                        <section class="hljs centered">
+                            <p>{ "Failed to create an object URL for the decrypted file. Try reloading the page?" }</p>
+                        </section>
+                    }
+                }
+            }
         }
     }
 }

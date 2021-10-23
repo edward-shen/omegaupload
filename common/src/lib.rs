@@ -266,6 +266,8 @@ impl Header for Expiration {
 
 impl From<&Expiration> for HeaderValue {
     fn from(expiration: &Expiration) -> Self {
+        // SAFETY: All possible values of `Expiration` are valid header values,
+        // so we don't need the extra check.
         unsafe {
             Self::from_maybe_shared_unchecked(match expiration {
                 Expiration::BurnAfterReading => Bytes::from_static(b"0"),
