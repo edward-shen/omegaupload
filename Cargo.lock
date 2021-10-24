@@ -436,12 +436,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "downcast-rs"
-version = "1.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9ea835d29036a4087793836fa931b08837ad5e957da9e23886b29586fb9b6650"
-
-[[package]]
 name = "either"
 version = "1.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1135,7 +1129,6 @@ dependencies = [
 name = "omegaupload-common"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "base64",
  "bytes",
  "chacha20poly1305",
@@ -1172,10 +1165,8 @@ dependencies = [
 name = "omegaupload-web"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "byte-unit",
  "bytes",
- "downcast-rs",
  "getrandom",
  "gloo-console",
  "http",

@@ -1,1 +1,0 @@
-window.addEventListener("hashchange", () => location.reload());

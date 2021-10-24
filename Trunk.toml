@@ -6,3 +6,8 @@ release = true
 [[proxy]]
 backend = "http://localhost:8081"
 rewrite = "/api/"
+
+[[hooks]]
+stage="post_build"
+command="npx"
+command_arguments=["swc", "$TRUNK_SOURCE_DIR/src/main.ts", "-o", "$TRUNK_STAGING_DIR/main.js"]

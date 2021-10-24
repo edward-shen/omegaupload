@@ -153,13 +153,13 @@ impl From<&str> for PartialParsedUrl {
         for (key, value) in args {
             match (key, value) {
                 ("key", Some(value)) => {
-                    decryption_key = base64::decode(value).map(|k| *Key::from_slice(&k)).ok();
+                    decryption_key = dbg!(base64::decode(value).map(|k| *Key::from_slice(&k)).ok());
                 }
                 ("pw", _) => {
                     needs_password = true;
                 }
                 ("nonce", Some(value)) => {
-                    nonce = base64::decode(value).as_deref().map(Nonce::from_slice).ok();
+                    nonce = dbg!(base64::decode(value).as_deref().map(Nonce::from_slice).ok());
                 }
                 _ => (),
             }
@@ -229,12 +229,12 @@ impl Display for Expiration {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Expiration::BurnAfterReading => {
-                write!(f, "This paste has been burned. You now have the only copy.")
+                write!(f, "This item has been burned. You now have the only copy.")
             }
             Expiration::UnixTime(time) => write!(
                 f,
                 "{}",
-                time.format("This paste will expire on %A, %B %-d, %Y at %T %Z.")
+                time.format("This item will expire on %A, %B %-d, %Y at %T %Z.")
             ),
         }
     }

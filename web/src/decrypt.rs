@@ -1,99 +1,16 @@
-use std::{collections::HashSet, sync::Arc};
+use std::fmt::{Display, Formatter};
+use std::sync::Arc;
 
 use gloo_console::log;
 use image::GenericImageView;
 use js_sys::{Array, Uint8Array};
-use omegaupload_common::{
-    crypto::{open_in_place, Key, Nonce},
-    Expiration,
-};
+use omegaupload_common::crypto::{open_in_place, Key, Nonce};
 use wasm_bindgen::JsCast;
 use web_sys::Blob;
-use yew::worker::{Agent, AgentLink, Context, HandlerId};
-use yew::{html::Scope, worker::Public};
 
-use crate::{DecryptedData, Paste, PasteCompleteConstructionError};
+use crate::DecryptedData;
 
-#[derive(Clone)]
-pub struct DecryptionAgent {
-    link: AgentLink<Self>,
-}
-
-impl Agent for DecryptionAgent {
-    type Reach = Public<Self>;
-
-    type Message = ();
-
-    type Input = DecryptionAgentMessage;
-
-    type Output = Result<(DecryptedData, PasteContext), PasteCompleteConstructionError>;
-
-    fn create(link: AgentLink<Self>) -> Self {
-        Self { link }
-    }
-
-    fn update(&mut self, _: Self::Message) {}
-
-    fn handle_input(
-        &mut self,
-        DecryptionAgentMessage { context, params }: Self::Input,
-        id: HandlerId,
-    ) {
-        let DecryptionParams {
-            data,
-            key,
-            nonce,
-            maybe_password,
-        } = params;
-
-        self.link.respond(
-            id,
-            decrypt(data, key, nonce, maybe_password).map(|res| (res, context)),
-        )
-    }
-}
-
-pub struct DecryptionAgentMessage {
-    context: PasteContext,
-    params: DecryptionParams,
-}
-
-impl DecryptionAgentMessage {
-    pub fn new(context: PasteContext, params: DecryptionParams) -> Self {
-        Self { context, params }
-    }
-}
-
-pub struct PasteContext {
-    pub link: Scope<Paste>,
-    pub expires: Option<Expiration>,
-}
-
-impl PasteContext {
-    pub fn new(link: Scope<Paste>, expires: Option<Expiration>) -> Self {
-        Self { link, expires }
-    }
-}
-
-pub struct DecryptionParams {
-    data: Vec<u8>,
-    key: Key,
-    nonce: Nonce,
-    maybe_password: Option<Key>,
-}
-
-impl DecryptionParams {
-    pub fn new(data: Vec<u8>, key: Key, nonce: Nonce, maybe_password: Option<Key>) -> Self {
-        Self {
-            data,
-            key,
-            nonce,
-            maybe_password,
-        }
-    }
-}
-
-fn decrypt(
+pub fn decrypt(
     mut container: Vec<u8>,
     key: Key,
     nonce: Nonce,
@@ -133,6 +50,27 @@ fn decrypt(
             ))
         } else {
             Ok(DecryptedData::Blob(blob))
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum PasteCompleteConstructionError {
+    StageOneFailure,
+    StageTwoFailure,
+}
+
+impl std::error::Error for PasteCompleteConstructionError {}
+
+impl Display for PasteCompleteConstructionError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PasteCompleteConstructionError::StageOneFailure => {
+                write!(f, "Failed to decrypt stage one.")
+            }
+            PasteCompleteConstructionError::StageTwoFailure => {
+                write!(f, "Failed to decrypt stage two.")
+            }
         }
     }
 }
