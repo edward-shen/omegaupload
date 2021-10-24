@@ -1,4 +1,5 @@
-/target
+**/target
 **/database
-/web/dist/
+**/dist/
 **/node_modules
+test.*

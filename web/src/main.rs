@@ -5,6 +5,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use byte_unit::Byte;
+use decrypt::DecryptedData;
 use gloo_console::log;
 use http::header::EXPIRES;
 use http::uri::PathAndQuery;
@@ -234,6 +235,38 @@ impl Component for Paste {
                                 entry.push(&JsString::from(expires.to_string()));
                                 decrypted_object.push(&entry);
                             }
+                            DecryptedData::Audio(blob) => {
+                                let entry = Array::new();
+                                entry.push(&JsString::from("data"));
+                                entry.push(blob);
+                                decrypted_object.push(&entry);
+
+                                let entry = Array::new();
+                                entry.push(&JsString::from("type"));
+                                entry.push(&JsString::from("audio"));
+                                decrypted_object.push(&entry);
+
+                                let entry = Array::new();
+                                entry.push(&JsString::from("expiration"));
+                                entry.push(&JsString::from(expires.to_string()));
+                                decrypted_object.push(&entry);
+                            }
+                            DecryptedData::Video(blob) => {
+                                let entry = Array::new();
+                                entry.push(&JsString::from("data"));
+                                entry.push(blob);
+                                decrypted_object.push(&entry);
+
+                                let entry = Array::new();
+                                entry.push(&JsString::from("type"));
+                                entry.push(&JsString::from("video"));
+                                decrypted_object.push(&entry);
+
+                                let entry = Array::new();
+                                entry.push(&JsString::from("expiration"));
+                                entry.push(&JsString::from(expires.to_string()));
+                                decrypted_object.push(&entry);
+                            }
                         }
 
                         let db_entry = Object::from_entries(&decrypted_object).unwrap();
@@ -291,11 +324,4 @@ impl Component for Paste {
     fn view(&self) -> Html {
         html! {}
     }
-}
-
-#[derive(Clone)]
-pub enum DecryptedData {
-    String(Arc<String>),
-    Blob(Arc<Blob>),
-    Image(Arc<Blob>, (u32, u32), usize),
 }

@@ -64,11 +64,11 @@ main {
   cursor: pointer;
 }
 
-img {
-  margin-bottom: 4em;
+img, audio, video {
+  border-radius: $padding;
+  margin-bottom: $padding;
   max-height: 75vh;
   max-width: 75vw;
-  border-radius: $padding;
 }
 
 .primary {

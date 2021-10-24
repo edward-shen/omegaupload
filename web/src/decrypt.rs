@@ -8,7 +8,14 @@ use omegaupload_common::crypto::{open_in_place, Key, Nonce};
 use wasm_bindgen::JsCast;
 use web_sys::Blob;
 
-use crate::DecryptedData;
+#[derive(Clone)]
+pub enum DecryptedData {
+    String(Arc<String>),
+    Blob(Arc<Blob>),
+    Image(Arc<Blob>, (u32, u32), usize),
+    Audio(Arc<Blob>),
+    Video(Arc<Blob>),
+}
 
 pub fn decrypt(
     mut container: Vec<u8>,
@@ -49,7 +56,15 @@ pub fn decrypt(
                 container.len(),
             ))
         } else {
-            Ok(DecryptedData::Blob(blob))
+            let mime_type = tree_magic_mini::from_u8(&container);
+            log!(mime_type);
+            if mime_type.starts_with("audio/") {
+                Ok(DecryptedData::Audio(blob))
+            } else if mime_type.starts_with("video/") || mime_type.ends_with("x-matroska") {
+                Ok(DecryptedData::Video(blob))
+            } else {
+                Ok(DecryptedData::Blob(blob))
+            }
         }
     }
 }

@@ -4,10 +4,10 @@ function loadFromDb() {
   dbReq.onsuccess = (evt) => {
     const db = (evt.target as IDBRequest).result;
     const obj_store = db
-      .transaction("decrypted data", "readonly")
-      .objectStore("decrypted data")
-      .get(window.location.pathname);
-    obj_store.onsuccess = (evt) => {
+      .transaction("decrypted data")
+      .objectStore("decrypted data");
+    let fetchReq = obj_store.get(window.location.pathname);
+    fetchReq.onsuccess = (evt) => {
       const data = (evt.target as IDBRequest).result;
       switch (data.type) {
         case "string":
@@ -19,13 +19,32 @@ function loadFromDb() {
         case "image":
           createImagePasteUi(data);
           break;
+        case "audio":
+          createAudioPasteUi(data);
+          break;
+        case "video":
+          createVideoPasteUi(data);
+          break;
         default:
           createBrokenStateUi();
           break;
       }
+
+      // IDB was only used as a temporary medium;
+      window.onbeforeunload = (e) => {
+        // See https://link.eddie.sh/NrIIq on why .commit is necessary.
+        const transaction = db.transaction("decrypted data", "readwrite");
+        transaction
+          .objectStore("decrypted data")
+          .delete(window.location.pathname);
+        transaction.commit();
+        transaction.oncomplete = () => {
+          console.log("Item deleted from cache");
+        }
+      };
     };
 
-    obj_store.onerror = (evt) => {
+    fetchReq.onerror = (evt) => {
       console.log("err");
       console.log(evt);
     };
@@ -56,37 +75,6 @@ function createStringPasteUi(data) {
 
   hljs.highlightAll();
   hljs.initLineNumbersOnLoad();
-}
-
-function createImagePasteUi(data) {
-  let bodyEle = document.getElementsByTagName("body")[0];
-  bodyEle.textContent = '';
-
-  let mainEle = document.createElement("main");
-  mainEle.classList.add("hljs");
-  mainEle.classList.add("centered");
-  mainEle.classList.add("fullscreen");
-
-  const downloadLink = URL.createObjectURL(data.data);
-
-  let expirationEle = document.createElement("p");
-  expirationEle.textContent = data.expiration;
-  mainEle.appendChild(expirationEle);
-
-  let imgEle = document.createElement("img");
-  imgEle.src = downloadLink;
-  mainEle.appendChild(imgEle);
-
-
-  let downloadEle = document.createElement("a");
-  downloadEle.href = downloadLink;
-  downloadEle.download = window.location.pathname;
-  downloadEle.classList.add("hljs-meta");
-  downloadEle.textContent = data.button;
-  mainEle.appendChild(downloadEle);
-
-
-  bodyEle.appendChild(mainEle);
 }
 
 function createBlobPasteUi(data) {
@@ -127,6 +115,49 @@ function createBlobPasteUi(data) {
   };
   mainEle.appendChild(displayAnywayEle);
   bodyEle.appendChild(mainEle);
+}
+
+function createImagePasteUi({ expiration, data, button }) {
+  createMultiMediaPasteUi("img", expiration, data, button);
+}
+
+function createAudioPasteUi({ expiration, data }) {
+  createMultiMediaPasteUi("audio", expiration, data, "Download");
+}
+
+function createVideoPasteUi({ expiration, data }) {
+  createMultiMediaPasteUi("video", expiration, data, "Download");
+}
+
+function createMultiMediaPasteUi(tag, expiration, data, downloadMessage) {
+  let bodyEle = document.getElementsByTagName("body")[0];
+  bodyEle.textContent = '';
+
+  let mainEle = document.createElement("main");
+  mainEle.classList.add("hljs");
+  mainEle.classList.add("centered");
+  mainEle.classList.add("fullscreen");
+
+  const downloadLink = URL.createObjectURL(data);
+
+  let expirationEle = document.createElement("p");
+  expirationEle.textContent = expiration;
+  mainEle.appendChild(expirationEle);
+
+  let videoEle = document.createElement(tag);
+  videoEle.src = downloadLink;
+  videoEle.controls = true;
+  mainEle.appendChild(videoEle);
+
+  let downloadEle = document.createElement("a");
+  downloadEle.href = downloadLink;
+  downloadEle.download = window.location.pathname;
+  downloadEle.classList.add("hljs-meta");
+  downloadEle.textContent = downloadMessage;
+  mainEle.appendChild(downloadEle);
+
+  bodyEle.appendChild(mainEle);
+
 }
 
 // Exported to main.rs
