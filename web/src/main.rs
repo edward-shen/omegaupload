@@ -1,36 +1,56 @@
 #![warn(clippy::nursery, clippy::pedantic)]
 
-use std::marker::PhantomData;
 use std::str::FromStr;
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use byte_unit::Byte;
 use decrypt::DecryptedData;
 use gloo_console::log;
-use http::header::EXPIRES;
 use http::uri::PathAndQuery;
 use http::{StatusCode, Uri};
-use js_sys::{Array, JsString, Object, Uint8Array};
+use js_sys::{JsString, Object, Uint8Array};
 use omegaupload_common::{Expiration, PartialParsedUrl};
 use reqwasm::http::Request;
 use wasm_bindgen::prelude::{wasm_bindgen, Closure};
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::{spawn_local, JsFuture};
-use web_sys::{window, Event, IdbDatabase, IdbObjectStore, IdbOpenDbRequest, IdbTransactionMode};
+use web_sys::{Event, IdbObjectStore, IdbOpenDbRequest, IdbTransactionMode, Location, Window};
 
 use crate::decrypt::decrypt;
+use crate::idb_object::IdbObject;
+use crate::util::as_idb_db;
 
 mod decrypt;
+mod idb_object;
+mod util;
 
 #[wasm_bindgen]
 extern "C" {
-    fn loadFromDb();
-    fn createNotFoundUi();
+    #[wasm_bindgen(js_name = loadFromDb)]
+    fn load_from_db();
+    #[wasm_bindgen(js_name = createNotFoundUi)]
+    fn create_not_found_ui();
+}
+
+fn window() -> Window {
+    web_sys::window().expect("Failed to get a reference of the window")
+}
+
+fn location() -> Location {
+    window().location()
+}
+
+fn open_idb() -> Result<IdbOpenDbRequest> {
+    window()
+        .indexed_db()
+        .unwrap()
+        .context("Missing browser idb impl")?
+        .open("omegaupload")
+        .map_err(|_| anyhow!("Failed to open idb"))
 }
 
 fn main() {
-    let window = window().unwrap();
-    let url = String::from(window.location().to_string());
+    let url = String::from(location().to_string());
     let request_uri = {
         let mut uri_parts = url.parse::<Uri>().unwrap().into_parts();
         if let Some(parts) = uri_parts.path_and_query.as_mut() {
@@ -39,30 +59,27 @@ fn main() {
         Uri::from_parts(uri_parts).unwrap()
     };
 
-    if window.location().pathname().unwrap() == "/" {
+    log!(&url);
+    log!(&request_uri.to_string());
+    log!(&location().pathname().unwrap());
+    if location().pathname().unwrap() == "/" {
     } else {
         spawn_local(async {
-            a(request_uri, url).await;
+            if let Err(e) = fetch_resources(request_uri, url).await {
+                log!(e.to_string());
+            }
         });
     }
 }
 
 #[allow(clippy::future_not_send)]
-async fn a(request_uri: Uri, url: String) -> Result<()> {
+async fn fetch_resources(request_uri: Uri, url: String) -> Result<()> {
     match Request::get(&request_uri.to_string()).send().await {
         Ok(resp) if resp.status() == StatusCode::OK => {
-            let expires = resp
-                .headers()
-                .get(EXPIRES.as_str())
-                .ok()
-                .flatten()
-                .as_deref()
-                .and_then(|v| Expiration::try_from(v).ok())
-                .as_ref()
-                .map_or_else(
-                    || "This item does not expire.".to_string(),
-                    Expiration::to_string,
-                );
+            let expires = Expiration::try_from(resp.headers()).map_or_else(
+                |_| "This item does not expire.".to_string(),
+                |expires| expires.to_string(),
+            );
 
             let data = {
                 let data_fut = resp
@@ -75,43 +92,32 @@ async fn a(request_uri: Uri, url: String) -> Result<()> {
                 Uint8Array::new(&data).to_vec()
             };
 
-            let info = url
-                .split_once('#')
-                .map(|(_, fragment)| PartialParsedUrl::from(fragment))
-                .unwrap_or_default();
-            let key = info
-                .decryption_key
-                .expect("missing key should be handled in the future");
-            let nonce = info.nonce.expect("missing nonce be handled in the future");
-
-            let result = decrypt(data, key, nonce, None);
-
-            let decrypted = match result {
-                Ok(decrypted) => decrypted,
-                Err(err) => {
-                    // log!("decryption error: {}", err);
-                    // return Box::new(PasteError(err));
-                    unimplemented!()
-                }
+            let (key, nonce) = {
+                let partial_parsed_url = url
+                    .split_once('#')
+                    .map(|(_, fragment)| PartialParsedUrl::from(fragment))
+                    .unwrap_or_default();
+                let key = partial_parsed_url
+                    .decryption_key
+                    .context("missing key should be handled in the future")?;
+                let nonce = partial_parsed_url
+                    .nonce
+                    .context("missing nonce be handled in the future")?;
+                (key, nonce)
             };
 
-            let db_open_req = window()
-                .unwrap()
-                .indexed_db()
-                .unwrap()
-                .unwrap()
-                .open("omegaupload")
-                .unwrap();
+            let decrypted = decrypt(data, key, nonce, None)?;
+            let db_open_req = open_idb()?;
 
             // On success callback
             let on_success = Closure::once(Box::new(move |event: Event| {
-                let target: IdbOpenDbRequest = event.target().unwrap().dyn_into().unwrap();
-                let db: IdbDatabase = target.result().unwrap().dyn_into().unwrap();
-                let transaction: IdbObjectStore = db
+                let transaction: IdbObjectStore = as_idb_db(&event)
                     .transaction_with_str_and_mode("decrypted data", IdbTransactionMode::Readwrite)
                     .unwrap()
                     .object_store("decrypted data")
                     .unwrap();
+
+                log!(line!());
 
                 let decrypted_object = match &decrypted {
                     DecryptedData::String(s) => IdbObject::new()
@@ -146,37 +152,49 @@ async fn a(request_uri: Uri, url: String) -> Result<()> {
                         .data(blob),
                 };
 
-                let db_entry = Object::from_entries(decrypted_object.as_ref()).unwrap();
-                transaction
+                log!(line!());
+                let put_action = transaction
                     .put_with_key(
-                        &db_entry,
-                        &JsString::from(window().unwrap().location().pathname().unwrap()),
+                        &Object::from(decrypted_object),
+                        &JsString::from(location().pathname().unwrap()),
                     )
-                    .unwrap()
-                    .set_onsuccess(Some(
-                        Closure::once(Box::new(|| {
-                            log!("success");
-                            loadFromDb();
-                        }) as Box<dyn FnOnce()>)
-                        .into_js_value()
-                        .dyn_ref()
-                        .unwrap(),
-                    ));
+                    .unwrap();
+                put_action.set_onsuccess(Some(
+                    Closure::wrap(Box::new(|| {
+                        log!("success");
+                        load_from_db();
+                    }) as Box<dyn Fn()>)
+                    .into_js_value()
+                    .unchecked_ref(),
+                ));
+                put_action.set_onerror(Some(
+                    Closure::wrap(Box::new(|e| {
+                        log!(line!());
+                        log!(e);
+                    }) as Box<dyn Fn(Event)>)
+                    .into_js_value()
+                    .unchecked_ref(),
+                ));
             }) as Box<dyn FnOnce(Event)>);
 
-            db_open_req.set_onsuccess(Some(on_success.into_js_value().dyn_ref().unwrap()));
-
-            // On upgrade callback
+            db_open_req.set_onsuccess(Some(on_success.into_js_value().unchecked_ref()));
+            db_open_req.set_onerror(Some(
+                Closure::wrap(Box::new(|e| {
+                    log!(line!());
+                    log!(e);
+                }) as Box<dyn Fn(Event)>)
+                .into_js_value()
+                .unchecked_ref(),
+            ));
             let on_upgrade = Closure::wrap(Box::new(move |event: Event| {
-                let target: IdbOpenDbRequest = event.target().unwrap().dyn_into().unwrap();
-                let db: IdbDatabase = target.result().unwrap().dyn_into().unwrap();
-                let _obj_store = db.create_object_store("decrypted data").unwrap();
+                let db = as_idb_db(&event);
+                let _ = db.create_object_store("decrypted data").unwrap();
             }) as Box<dyn FnMut(Event)>);
-
-            db_open_req.set_onupgradeneeded(Some(on_upgrade.into_js_value().dyn_ref().unwrap()));
+            db_open_req.set_onupgradeneeded(Some(on_upgrade.into_js_value().unchecked_ref()));
+            log!(&db_open_req);
         }
         Ok(resp) if resp.status() == StatusCode::NOT_FOUND => {
-            createNotFoundUi();
+            create_not_found_ui();
         }
         Ok(resp) if resp.status() == StatusCode::BAD_REQUEST => {}
         Ok(err) => {}
@@ -185,79 +203,3 @@ async fn a(request_uri: Uri, url: String) -> Result<()> {
 
     Ok(())
 }
-
-struct IdbObject<State>(Array, PhantomData<State>);
-
-impl<State: IdbObjectState> IdbObject<State> {
-    fn add_tuple<NextState>(self, key: &str, value: &JsValue) -> IdbObject<NextState> {
-        let array = Array::new();
-        array.push(&JsString::from(key));
-        array.push(value);
-        self.0.push(&array);
-        IdbObject(self.0, PhantomData)
-    }
-}
-
-impl IdbObject<NeedsType> {
-    fn new() -> Self {
-        Self(Array::new(), PhantomData)
-    }
-
-    fn video(self) -> IdbObject<NeedsExpiration> {
-        self.add_tuple("type", &JsString::from("video"))
-    }
-
-    fn audio(self) -> IdbObject<NeedsExpiration> {
-        self.add_tuple("type", &JsString::from("audio"))
-    }
-
-    fn image(self) -> IdbObject<NeedsExpiration> {
-        self.add_tuple("type", &JsString::from("image"))
-    }
-
-    fn blob(self) -> IdbObject<NeedsExpiration> {
-        self.add_tuple("type", &JsString::from("blob"))
-    }
-
-    fn string(self) -> IdbObject<NeedsExpiration> {
-        self.add_tuple("type", &JsString::from("string"))
-    }
-}
-
-impl IdbObject<NeedsExpiration> {
-    fn expiration_text(self, expires: &str) -> IdbObject<NeedsData> {
-        self.add_tuple("expiration", &JsString::from(expires))
-    }
-}
-
-impl IdbObject<NeedsData> {
-    fn data(self, value: &JsValue) -> IdbObject<Ready> {
-        self.add_tuple("data", value)
-    }
-}
-
-impl IdbObject<Ready> {
-    fn extra(self, key: &str, value: impl Into<JsValue>) -> Self {
-        self.add_tuple(key, &value.into())
-    }
-}
-
-impl AsRef<JsValue> for IdbObject<Ready> {
-    fn as_ref(&self) -> &JsValue {
-        self.0.as_ref()
-    }
-}
-
-trait IdbObjectState {}
-
-enum NeedsType {}
-impl IdbObjectState for NeedsType {}
-
-enum NeedsExpiration {}
-impl IdbObjectState for NeedsExpiration {}
-
-enum NeedsData {}
-impl IdbObjectState for NeedsData {}
-
-enum Ready {}
-impl IdbObjectState for Ready {}

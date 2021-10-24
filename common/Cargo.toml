@@ -17,3 +17,9 @@ serde = { version = "1", features = ["derive"] }
 sha2 = "0.9"
 thiserror = "1"
 url = "2"
+
+web-sys = { version = "0.3", features = ["Headers"], optional = true }
+http = { version = "0.2", optional = true }
+
+[features]
+wasm = ["web-sys", "http"]

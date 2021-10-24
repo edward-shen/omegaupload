@@ -293,6 +293,21 @@ impl From<Expiration> for HeaderValue {
     }
 }
 
+#[cfg(feature = "wasm")]
+impl TryFrom<web_sys::Headers> for Expiration {
+    type Error = ParseHeaderValueError;
+
+    fn try_from(headers: web_sys::Headers) -> Result<Self, Self::Error> {
+        headers
+            .get(http::header::EXPIRES.as_str())
+            .ok()
+            .flatten()
+            .as_deref()
+            .and_then(|v| Expiration::try_from(v).ok())
+            .ok_or(ParseHeaderValueError)
+    }
+}
+
 pub struct ParseHeaderValueError;
 
 impl TryFrom<&HeaderValue> for Expiration {

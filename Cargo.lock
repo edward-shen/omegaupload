@@ -1051,12 +1051,14 @@ dependencies = [
  "chacha20poly1305",
  "chrono",
  "headers",
+ "http",
  "lazy_static",
  "rand",
  "serde",
  "sha2",
  "thiserror",
  "url",
+ "web-sys",
 ]
 
 [[package]]

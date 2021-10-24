@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-omegaupload-common = { path = "../common" }
+omegaupload-common = { path = "../common", features = ["wasm"] }
 # Enables wasm support
 getrandom = { version = "*", features = ["js"] }
 
