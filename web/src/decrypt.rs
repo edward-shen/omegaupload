@@ -35,28 +35,28 @@ pub fn decrypt(
         .map_err(|_| PasteCompleteConstructionError::StageTwoFailure)?;
 
     log!("stage 2 decryption end");
-    if let Ok(decrypted) = std::str::from_utf8(&container) {
+    if let Ok(decrypted) = std::str::from_utf8(container) {
         Ok(DecryptedData::String(Arc::new(decrypted.to_owned())))
     } else {
         log!("blob conversion start");
         let blob_chunks = Array::new_with_length(container.chunks(65536).len().try_into().unwrap());
         for (i, chunk) in container.chunks(65536).enumerate() {
             let array = Uint8Array::new_with_length(chunk.len().try_into().unwrap());
-            array.copy_from(&chunk);
+            array.copy_from(chunk);
             blob_chunks.set(i.try_into().unwrap(), array.dyn_into().unwrap());
         }
         let blob =
             Arc::new(Blob::new_with_u8_array_sequence(blob_chunks.dyn_ref().unwrap()).unwrap());
         log!("blob conversion end");
 
-        if let Ok(image) = image::load_from_memory(&container) {
+        if let Ok(image) = image::load_from_memory(container) {
             Ok(DecryptedData::Image(
                 blob,
                 image.dimensions(),
                 container.len(),
             ))
         } else {
-            let mime_type = tree_magic_mini::from_u8(&container);
+            let mime_type = tree_magic_mini::from_u8(container);
             log!(mime_type);
             if mime_type.starts_with("audio/") {
                 Ok(DecryptedData::Audio(blob))

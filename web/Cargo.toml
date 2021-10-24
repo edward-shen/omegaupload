@@ -20,9 +20,6 @@ reqwasm = "0.2"
 tree_magic_mini = { version = "3", features = ["with-gpl-data"] }
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
-yew = { version = "0.18", features = ["wasm-bindgen-futures"] }
-yew-router = "0.15"
-yewtil = "0.4"
 
 [dependencies.web-sys]
 version = "0.3"
@@ -38,5 +35,7 @@ features = [
   "IdbIndex",
   "IdbIndexParameters",
   "Event",
-  "EventTarget"
+  "EventTarget",
+  "Window",
+  "Location",
 ]
