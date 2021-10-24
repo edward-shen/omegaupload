@@ -1082,6 +1082,7 @@ dependencies = [
 name = "omegaupload-web"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "byte-unit",
  "bytes",
  "getrandom",

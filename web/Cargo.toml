@@ -10,6 +10,7 @@ omegaupload-common = { path = "../common" }
 # Enables wasm support
 getrandom = { version = "*", features = ["js"] }
 
+anyhow = "1"
 bytes = "1"
 byte-unit = "4"
 gloo-console = "0.1"

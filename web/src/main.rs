@@ -1,7 +1,9 @@
 #![warn(clippy::nursery, clippy::pedantic)]
 
+use std::marker::PhantomData;
 use std::str::FromStr;
 
+use anyhow::{anyhow, Result};
 use byte_unit::Byte;
 use decrypt::DecryptedData;
 use gloo_console::log;
@@ -39,12 +41,14 @@ fn main() {
 
     if window.location().pathname().unwrap() == "/" {
     } else {
-        spawn_local(a(request_uri, url));
+        spawn_local(async {
+            a(request_uri, url).await;
+        });
     }
 }
 
 #[allow(clippy::future_not_send)]
-async fn a(request_uri: Uri, url: String) {
+async fn a(request_uri: Uri, url: String) -> Result<()> {
     match Request::get(&request_uri.to_string()).send().await {
         Ok(resp) if resp.status() == StatusCode::OK => {
             let expires = resp
@@ -61,20 +65,24 @@ async fn a(request_uri: Uri, url: String) {
                 );
 
             let data = {
-                Uint8Array::new(
-                    &JsFuture::from(resp.as_raw().array_buffer().unwrap())
-                        .await
-                        .unwrap(),
-                )
-                .to_vec()
+                let data_fut = resp
+                    .as_raw()
+                    .array_buffer()
+                    .expect("Failed to get raw bytes from response");
+                let data = JsFuture::from(data_fut)
+                    .await
+                    .expect("Failed to result array buffer future");
+                Uint8Array::new(&data).to_vec()
             };
 
             let info = url
                 .split_once('#')
                 .map(|(_, fragment)| PartialParsedUrl::from(fragment))
                 .unwrap_or_default();
-            let key = info.decryption_key.unwrap();
-            let nonce = info.nonce.unwrap();
+            let key = info
+                .decryption_key
+                .expect("missing key should be handled in the future");
+            let nonce = info.nonce.expect("missing nonce be handled in the future");
 
             let result = decrypt(data, key, nonce, None);
 
@@ -105,111 +113,40 @@ async fn a(request_uri: Uri, url: String) {
                     .object_store("decrypted data")
                     .unwrap();
 
-                let decrypted_object = Array::new();
-                match &decrypted {
-                    DecryptedData::String(s) => {
-                        let entry = Array::new();
-                        entry.push(&JsString::from("data"));
-                        entry.push(&JsValue::from_str(s));
-                        decrypted_object.push(&entry);
-
-                        let entry = Array::new();
-                        entry.push(&JsString::from("type"));
-                        entry.push(&JsString::from("string"));
-                        decrypted_object.push(&entry);
-
-                        let entry = Array::new();
-                        entry.push(&JsString::from("expiration"));
-                        entry.push(&JsString::from(expires.to_string()));
-                        decrypted_object.push(&entry);
-                    }
+                let decrypted_object = match &decrypted {
+                    DecryptedData::String(s) => IdbObject::new()
+                        .string()
+                        .expiration_text(&expires)
+                        .data(&JsValue::from_str(s)),
                     DecryptedData::Blob(blob) => {
-                        let entry = Array::new();
-                        entry.push(&JsString::from("data"));
-                        entry.push(blob);
-                        decrypted_object.push(&entry);
-
-                        let entry = Array::new();
-                        entry.push(&JsString::from("type"));
-                        entry.push(&JsString::from("blob"));
-                        decrypted_object.push(&entry);
-
-                        let entry = Array::new();
-                        entry.push(&JsString::from("expiration"));
-                        entry.push(&JsString::from(expires.to_string()));
-                        decrypted_object.push(&entry);
+                        IdbObject::new().blob().expiration_text(&expires).data(blob)
                     }
-                    DecryptedData::Image(blob, (width, height), size) => {
-                        let entry = Array::new();
-                        entry.push(&JsString::from("data"));
-                        entry.push(blob);
-                        decrypted_object.push(&entry);
+                    DecryptedData::Image(blob, (width, height), size) => IdbObject::new()
+                        .image()
+                        .expiration_text(&expires)
+                        .data(blob)
+                        .extra("width", *width)
+                        .extra("height", *height)
+                        .extra(
+                            "button",
+                            &format!(
+                                "Download {} \u{2014} {} by {}",
+                                Byte::from_bytes(*size as u128).get_appropriate_unit(true),
+                                width,
+                                height,
+                            ),
+                        ),
+                    DecryptedData::Audio(blob) => IdbObject::new()
+                        .audio()
+                        .expiration_text(&expires)
+                        .data(blob),
+                    DecryptedData::Video(blob) => IdbObject::new()
+                        .video()
+                        .expiration_text(&expires)
+                        .data(blob),
+                };
 
-                        let entry = Array::new();
-                        entry.push(&JsString::from("type"));
-                        entry.push(&JsString::from("image"));
-                        decrypted_object.push(&entry);
-
-                        let entry = Array::new();
-                        entry.push(&JsString::from("width"));
-                        entry.push(&JsValue::from(*width));
-                        decrypted_object.push(&entry);
-
-                        let entry = Array::new();
-                        entry.push(&JsString::from("height"));
-                        entry.push(&JsValue::from(*height));
-                        decrypted_object.push(&entry);
-
-                        let entry = Array::new();
-                        entry.push(&JsString::from("button"));
-                        entry.push(&JsString::from(format!(
-                            "Download {} \u{2014} {} by {}",
-                            Byte::from_bytes(*size as u128).get_appropriate_unit(true),
-                            width,
-                            height,
-                        )));
-                        decrypted_object.push(&entry);
-
-                        let entry = Array::new();
-                        entry.push(&JsString::from("expiration"));
-                        entry.push(&JsString::from(expires.to_string()));
-                        decrypted_object.push(&entry);
-                    }
-                    DecryptedData::Audio(blob) => {
-                        let entry = Array::new();
-                        entry.push(&JsString::from("data"));
-                        entry.push(blob);
-                        decrypted_object.push(&entry);
-
-                        let entry = Array::new();
-                        entry.push(&JsString::from("type"));
-                        entry.push(&JsString::from("audio"));
-                        decrypted_object.push(&entry);
-
-                        let entry = Array::new();
-                        entry.push(&JsString::from("expiration"));
-                        entry.push(&JsString::from(expires.to_string()));
-                        decrypted_object.push(&entry);
-                    }
-                    DecryptedData::Video(blob) => {
-                        let entry = Array::new();
-                        entry.push(&JsString::from("data"));
-                        entry.push(blob);
-                        decrypted_object.push(&entry);
-
-                        let entry = Array::new();
-                        entry.push(&JsString::from("type"));
-                        entry.push(&JsString::from("video"));
-                        decrypted_object.push(&entry);
-
-                        let entry = Array::new();
-                        entry.push(&JsString::from("expiration"));
-                        entry.push(&JsString::from(expires.to_string()));
-                        decrypted_object.push(&entry);
-                    }
-                }
-
-                let db_entry = Object::from_entries(&decrypted_object).unwrap();
+                let db_entry = Object::from_entries(decrypted_object.as_ref()).unwrap();
                 transaction
                     .put_with_key(
                         &db_entry,
@@ -244,5 +181,83 @@ async fn a(request_uri: Uri, url: String) {
         Ok(resp) if resp.status() == StatusCode::BAD_REQUEST => {}
         Ok(err) => {}
         Err(err) => {}
-    };
+    }
+
+    Ok(())
 }
+
+struct IdbObject<State>(Array, PhantomData<State>);
+
+impl<State: IdbObjectState> IdbObject<State> {
+    fn add_tuple<NextState>(self, key: &str, value: &JsValue) -> IdbObject<NextState> {
+        let array = Array::new();
+        array.push(&JsString::from(key));
+        array.push(value);
+        self.0.push(&array);
+        IdbObject(self.0, PhantomData)
+    }
+}
+
+impl IdbObject<NeedsType> {
+    fn new() -> Self {
+        Self(Array::new(), PhantomData)
+    }
+
+    fn video(self) -> IdbObject<NeedsExpiration> {
+        self.add_tuple("type", &JsString::from("video"))
+    }
+
+    fn audio(self) -> IdbObject<NeedsExpiration> {
+        self.add_tuple("type", &JsString::from("audio"))
+    }
+
+    fn image(self) -> IdbObject<NeedsExpiration> {
+        self.add_tuple("type", &JsString::from("image"))
+    }
+
+    fn blob(self) -> IdbObject<NeedsExpiration> {
+        self.add_tuple("type", &JsString::from("blob"))
+    }
+
+    fn string(self) -> IdbObject<NeedsExpiration> {
+        self.add_tuple("type", &JsString::from("string"))
+    }
+}
+
+impl IdbObject<NeedsExpiration> {
+    fn expiration_text(self, expires: &str) -> IdbObject<NeedsData> {
+        self.add_tuple("expiration", &JsString::from(expires))
+    }
+}
+
+impl IdbObject<NeedsData> {
+    fn data(self, value: &JsValue) -> IdbObject<Ready> {
+        self.add_tuple("data", value)
+    }
+}
+
+impl IdbObject<Ready> {
+    fn extra(self, key: &str, value: impl Into<JsValue>) -> Self {
+        self.add_tuple(key, &value.into())
+    }
+}
+
+impl AsRef<JsValue> for IdbObject<Ready> {
+    fn as_ref(&self) -> &JsValue {
+        self.0.as_ref()
+    }
+}
+
+trait IdbObjectState {}
+
+enum NeedsType {}
+impl IdbObjectState for NeedsType {}
+
+enum NeedsExpiration {}
+impl IdbObjectState for NeedsExpiration {}
+
+enum NeedsData {}
+impl IdbObjectState for NeedsData {}
+
+enum Ready {}
+impl IdbObjectState for Ready {}
