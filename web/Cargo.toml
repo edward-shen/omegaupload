@@ -13,6 +13,7 @@ getrandom = { version = "*", features = ["js"] }
 anyhow = "1"
 bytes = "1"
 byte-unit = "4"
+console_error_panic_hook = "0.1"
 gloo-console = "0.1"
 http = "0.2"
 image = "0.23"
@@ -38,5 +39,6 @@ features = [
   "Event",
   "EventTarget",
   "Window",
+  "Performance",
   "Location",
 ]

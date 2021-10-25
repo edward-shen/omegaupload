@@ -50,6 +50,7 @@ fn open_idb() -> Result<IdbOpenDbRequest> {
 }
 
 fn main() {
+    std::panic::set_hook(Box::new(console_error_panic_hook::hook));
     let url = String::from(location().to_string());
     let request_uri = {
         let mut uri_parts = url.parse::<Uri>().unwrap().into_parts();
