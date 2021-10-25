@@ -14,7 +14,6 @@ bincode = "1"
 # to enable the feature
 bytes = { version = "*", features = ["serde"] }
 chrono = { version = "0.4", features = ["serde"] }
-futures = "0.3"
 # We just need to pull in whatever axum is pulling in
 headers = "*"
 rand = "0.8"

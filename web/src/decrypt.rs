@@ -1,9 +1,7 @@
 use std::fmt::{Display, Formatter};
-use std::io::Cursor;
 use std::sync::Arc;
 
 use gloo_console::log;
-use image::io::Reader;
 use js_sys::{Array, Uint8Array};
 use omegaupload_common::crypto::{open_in_place, Key, Nonce};
 use wasm_bindgen::JsCast;
