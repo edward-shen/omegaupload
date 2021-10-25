@@ -1070,6 +1070,7 @@ dependencies = [
  "bincode",
  "bytes",
  "chrono",
+ "futures",
  "headers",
  "omegaupload-common",
  "rand",
