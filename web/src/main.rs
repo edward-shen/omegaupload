@@ -117,8 +117,6 @@ async fn fetch_resources(request_uri: Uri, url: String) -> Result<()> {
                     .object_store("decrypted data")
                     .unwrap();
 
-                log!(line!());
-
                 let decrypted_object = match &decrypted {
                     DecryptedData::String(s) => IdbObject::new()
                         .string()
@@ -152,7 +150,6 @@ async fn fetch_resources(request_uri: Uri, url: String) -> Result<()> {
                         .data(blob),
                 };
 
-                log!(line!());
                 let put_action = transaction
                     .put_with_key(
                         &Object::from(decrypted_object),
@@ -169,7 +166,6 @@ async fn fetch_resources(request_uri: Uri, url: String) -> Result<()> {
                 ));
                 put_action.set_onerror(Some(
                     Closure::wrap(Box::new(|e| {
-                        log!(line!());
                         log!(e);
                     }) as Box<dyn Fn(Event)>)
                     .into_js_value()
@@ -180,7 +176,6 @@ async fn fetch_resources(request_uri: Uri, url: String) -> Result<()> {
             db_open_req.set_onsuccess(Some(on_success.into_js_value().unchecked_ref()));
             db_open_req.set_onerror(Some(
                 Closure::wrap(Box::new(|e| {
-                    log!(line!());
                     log!(e);
                 }) as Box<dyn Fn(Event)>)
                 .into_js_value()
@@ -191,7 +186,6 @@ async fn fetch_resources(request_uri: Uri, url: String) -> Result<()> {
                 let _ = db.create_object_store("decrypted data").unwrap();
             }) as Box<dyn FnMut(Event)>);
             db_open_req.set_onupgradeneeded(Some(on_upgrade.into_js_value().unchecked_ref()));
-            log!(&db_open_req);
         }
         Ok(resp) if resp.status() == StatusCode::NOT_FOUND => {
             create_not_found_ui();

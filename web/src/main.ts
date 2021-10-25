@@ -157,7 +157,6 @@ function createMultiMediaPasteUi(tag, expiration, data, downloadMessage) {
   mainEle.appendChild(downloadEle);
 
   bodyEle.appendChild(mainEle);
-
 }
 
 // Exported to main.rs
