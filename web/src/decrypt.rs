@@ -3,7 +3,7 @@ use std::io::Cursor;
 use std::sync::Arc;
 
 use gloo_console::log;
-use image::{EncodableLayout, GenericImageView, ImageDecoder};
+use image::io::Reader;
 use js_sys::{Array, Uint8Array};
 use omegaupload_common::crypto::{open_in_place, Key, Nonce};
 use wasm_bindgen::JsCast;
@@ -13,7 +13,7 @@ use web_sys::Blob;
 pub enum DecryptedData {
     String(Arc<String>),
     Blob(Arc<Blob>),
-    Image(Arc<Blob>, (u32, u32), usize),
+    Image(Arc<Blob>, (usize, usize), usize),
     Audio(Arc<Blob>),
     Video(Arc<Blob>),
 }
@@ -35,16 +35,25 @@ pub fn decrypt(
     let container = &mut container;
     log!("Stage 1 decryption started.");
     let start = now();
+
     if let Some(password) = maybe_password {
-        open_in_place(container, &nonce.increment(), &password)
-            .map_err(|_| PasteCompleteConstructionError::StageOneFailure)?;
+        crate::render_message("Decrypting Stage 1...".into());
+        open_in_place(container, &nonce.increment(), &password).map_err(|_| {
+            crate::render_message("Unable to decrypt paste with the provided password.".into());
+            PasteCompleteConstructionError::StageOneFailure
+        })?;
     }
     log!(format!("Stage 1 completed in {}ms", now() - start));
 
     log!("Stage 2 decryption started.");
     let start = now();
-    open_in_place(container, &nonce, &key)
-        .map_err(|_| PasteCompleteConstructionError::StageTwoFailure)?;
+    crate::render_message("Decrypting Stage 2...".into());
+    open_in_place(container, &nonce, &key).map_err(|_| {
+        crate::render_message(
+            "Unable to decrypt paste with the provided encryption key and nonce.".into(),
+        );
+        PasteCompleteConstructionError::StageTwoFailure
+    })?;
     log!(format!("Stage 2 completed in {}ms", now() - start));
 
     if let Ok(decrypted) = std::str::from_utf8(container) {
@@ -64,15 +73,18 @@ pub fn decrypt(
 
         log!("Image introspection started");
         let start = now();
-        let res = image::guess_format(&container);
+        let dimensions = imagesize::blob_size(&container).ok();
         log!(format!(
             "Image introspection completed in {}ms",
             now() - start
         ));
-        // let image_reader = image::io::Reader::new(Cursor::new(container.as_bytes()));
-        if let Ok(dimensions) = res {
-            log!(format!("{:?}", dimensions));
-            Ok(DecryptedData::Image(blob, (0, 0), container.len()))
+
+        if let Some(dimensions) = dimensions {
+            Ok(DecryptedData::Image(
+                blob,
+                (dimensions.width, dimensions.height),
+                container.len(),
+            ))
         } else {
             let mime_type = tree_magic_mini::from_u8(container);
             log!(mime_type);

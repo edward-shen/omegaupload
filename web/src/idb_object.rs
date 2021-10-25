@@ -21,7 +21,7 @@ impl From<IdbObject<Ready>> for Object {
             Ok(o) => o,
             // SAFETY: IdbObject maintains the invariant that it can eventually
             // be constructed into a JS object.
-            _ => unsafe { panic!() },
+            _ => unsafe { unreachable_unchecked() },
         }
     }
 }

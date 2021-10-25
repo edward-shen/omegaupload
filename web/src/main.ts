@@ -26,7 +26,7 @@ function loadFromDb() {
           createVideoPasteUi(data);
           break;
         default:
-          createBrokenStateUi();
+          renderMessage("Something went wrong. Try clearing local data.");
           break;
       }
 
@@ -159,26 +159,15 @@ function createMultiMediaPasteUi(tag, expiration, data, downloadMessage) {
   bodyEle.appendChild(mainEle);
 }
 
-// Exported to main.rs
-function createNotFoundUi() {
+function renderMessage(message) {
   let body = document.getElementsByTagName("body")[0];
   body.textContent = '';
-  body.appendChild(createGenericError("Either the paste has been burned or one never existed."));
-}
-
-function createBrokenStateUi() {
-  let body = document.getElementsByTagName("body")[0];
-  body.textContent = '';
-  body.appendChild(createGenericError("Something went wrong. Try clearing local data."));
-}
-
-function createGenericError(message) {
   let mainEle = document.createElement("main");
   mainEle.classList.add("hljs");
   mainEle.classList.add("centered");
   mainEle.classList.add("fullscreen");
   mainEle.textContent = message;
-  return mainEle;
+  body.appendChild(mainEle);
 }
 
 window.addEventListener("hashchange", () => location.reload());
