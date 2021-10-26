@@ -74,21 +74,19 @@ fn main() {
             .split_once('#')
             .map(|(_, fragment)| PartialParsedUrl::from(fragment))
             .unwrap_or_default();
-        let key = match partial_parsed_url.decryption_key {
-            Some(key) => key,
-            None => {
-                error!("Key is missing in url; bailing.");
-                render_message("Invalid paste link: Missing decryption key.".into());
-                return;
-            }
+        let key = if let Some(key) = partial_parsed_url.decryption_key {
+            key
+        } else {
+            error!("Key is missing in url; bailing.");
+            render_message("Invalid paste link: Missing decryption key.".into());
+            return;
         };
-        let nonce = match partial_parsed_url.nonce {
-            Some(nonce) => nonce,
-            None => {
-                error!("Nonce is missing in url; bailing.");
-                render_message("Invalid paste link: Missing nonce.".into());
-                return;
-            }
+        let nonce = if let Some(nonce) = partial_parsed_url.nonce {
+            nonce
+        } else {
+            error!("Nonce is missing in url; bailing.");
+            render_message("Invalid paste link: Missing nonce.".into());
+            return;
         };
         (key, nonce, partial_parsed_url.needs_password)
     };
@@ -175,20 +173,15 @@ async fn fetch_resources(
                     DecryptedData::Blob(blob) => {
                         IdbObject::new().blob().expiration_text(&expires).data(blob)
                     }
-                    DecryptedData::Image(blob, (width, height), size) => IdbObject::new()
+                    DecryptedData::Image(blob, size) => IdbObject::new()
                         .image()
                         .expiration_text(&expires)
                         .data(blob)
-                        .extra("width", *width)
-                        .extra("height", *height)
                         .extra(
-                            "button",
-                            &format!(
-                                "Download {} \u{2014} {} by {}",
-                                Byte::from_bytes(*size as u128).get_appropriate_unit(true),
-                                width,
-                                height,
-                            ),
+                            "file_size",
+                            Byte::from_bytes(*size as u128)
+                                .get_appropriate_unit(true)
+                                .to_string(),
                         ),
                     DecryptedData::Audio(blob) => IdbObject::new()
                         .audio()
@@ -233,7 +226,7 @@ async fn fetch_resources(
             ));
             let on_upgrade = Closure::wrap(Box::new(move |event: Event| {
                 let db = as_idb_db(&event);
-                let _ = db.create_object_store("decrypted data").unwrap();
+                let _obj_store = db.create_object_store("decrypted data").unwrap();
             }) as Box<dyn FnMut(Event)>);
             db_open_req.set_onupgradeneeded(Some(on_upgrade.into_js_value().unchecked_ref()));
         }
@@ -244,7 +237,7 @@ async fn fetch_resources(
             render_message("Invalid paste URL.".into());
         }
         Ok(err) => {
-            render_message(format!("{}", err.status_text()).into());
+            render_message(err.status_text().into());
         }
         Err(err) => {
             render_message(format!("{}", err).into());

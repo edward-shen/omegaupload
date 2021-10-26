@@ -303,7 +303,7 @@ impl TryFrom<web_sys::Headers> for Expiration {
             .ok()
             .flatten()
             .as_deref()
-            .and_then(|v| Expiration::try_from(v).ok())
+            .and_then(|v| Self::try_from(v).ok())
             .ok_or(ParseHeaderValueError)
     }
 }

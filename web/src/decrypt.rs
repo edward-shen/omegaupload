@@ -11,7 +11,7 @@ use web_sys::Blob;
 pub enum DecryptedData {
     String(Arc<String>),
     Blob(Arc<Blob>),
-    Image(Arc<Blob>, (usize, usize), usize),
+    Image(Arc<Blob>, usize),
     Audio(Arc<Blob>),
     Video(Arc<Blob>),
 }
@@ -69,30 +69,16 @@ pub fn decrypt(
             Arc::new(Blob::new_with_u8_array_sequence(blob_chunks.dyn_ref().unwrap()).unwrap());
         log!(format!("Blob conversion completed in {}ms", now() - start));
 
-        log!("Image introspection started");
-        let start = now();
-        let dimensions = imagesize::blob_size(&container).ok();
-        log!(format!(
-            "Image introspection completed in {}ms",
-            now() - start
-        ));
+        let mime_type = tree_magic_mini::from_u8(container);
 
-        if let Some(dimensions) = dimensions {
-            Ok(DecryptedData::Image(
-                blob,
-                (dimensions.width, dimensions.height),
-                container.len(),
-            ))
+        if mime_type.starts_with("image/") || mime_type == "application/x-riff" {
+            Ok(DecryptedData::Image(blob, container.len()))
+        } else if mime_type.starts_with("audio/") {
+            Ok(DecryptedData::Audio(blob))
+        } else if mime_type.starts_with("video/") || mime_type == "application/x-matroska" {
+            Ok(DecryptedData::Video(blob))
         } else {
-            let mime_type = tree_magic_mini::from_u8(container);
-            log!(mime_type);
-            if mime_type.starts_with("audio/") {
-                Ok(DecryptedData::Audio(blob))
-            } else if mime_type.starts_with("video/") || mime_type.ends_with("x-matroska") {
-                Ok(DecryptedData::Video(blob))
-            } else {
-                Ok(DecryptedData::Blob(blob))
-            }
+            Ok(DecryptedData::Blob(blob))
         }
     }
 }

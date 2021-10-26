@@ -117,8 +117,12 @@ function createBlobPasteUi(data) {
   bodyEle.appendChild(mainEle);
 }
 
-function createImagePasteUi({ expiration, data, button }) {
-  createMultiMediaPasteUi("img", expiration, data, button);
+function createImagePasteUi({ expiration, data, file_size }) {
+  createMultiMediaPasteUi("img", expiration, data, (downloadEle, imgEle) => {
+    imgEle.onload = () => {
+      downloadEle.textContent = "Download " + file_size + " \u2014 " + imgEle.naturalWidth + " by " + imgEle.naturalHeight;
+    }
+  });
 }
 
 function createAudioPasteUi({ expiration, data }) {
@@ -129,7 +133,7 @@ function createVideoPasteUi({ expiration, data }) {
   createMultiMediaPasteUi("video", expiration, data, "Download");
 }
 
-function createMultiMediaPasteUi(tag, expiration, data, downloadMessage) {
+function createMultiMediaPasteUi(tag, expiration, data, on_create?) {
   let bodyEle = document.getElementsByTagName("body")[0];
   bodyEle.textContent = '';
 
@@ -144,19 +148,24 @@ function createMultiMediaPasteUi(tag, expiration, data, downloadMessage) {
   expirationEle.textContent = expiration;
   mainEle.appendChild(expirationEle);
 
-  let videoEle = document.createElement(tag);
-  videoEle.src = downloadLink;
-  videoEle.controls = true;
-  mainEle.appendChild(videoEle);
+  let mediaEle = document.createElement(tag);
+  mediaEle.src = downloadLink;
+  mediaEle.controls = true;
+  mainEle.appendChild(mediaEle);
 
   let downloadEle = document.createElement("a");
   downloadEle.href = downloadLink;
   downloadEle.download = window.location.pathname;
   downloadEle.classList.add("hljs-meta");
-  downloadEle.textContent = downloadMessage;
   mainEle.appendChild(downloadEle);
 
   bodyEle.appendChild(mainEle);
+
+  if (on_create instanceof Function) {
+    on_create(downloadEle, mediaEle);
+  } else {
+    downloadEle.textContent = on_create;
+  }
 }
 
 function renderMessage(message) {

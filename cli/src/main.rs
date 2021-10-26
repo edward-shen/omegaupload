@@ -113,8 +113,10 @@ fn handle_download(url: ParsedUrl) -> Result<()> {
         .get(EXPIRES)
         .and_then(|v| Expiration::try_from(v).ok())
         .as_ref()
-        .map(ToString::to_string)
-        .unwrap_or_else(|| "This paste will not expire.".to_string());
+        .map_or_else(
+            || "This paste will not expire.".to_string(),
+            ToString::to_string,
+        );
 
     let mut data = res.bytes()?.as_ref().to_vec();
 

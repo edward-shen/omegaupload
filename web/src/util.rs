@@ -1,6 +1,3 @@
-use js_sys::Function;
-use wasm_bindgen::closure::WasmClosure;
-use wasm_bindgen::prelude::Closure;
 use wasm_bindgen::JsCast;
 use web_sys::{Event, IdbDatabase, IdbOpenDbRequest};
 

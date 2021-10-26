@@ -48,7 +48,7 @@ async fn main() -> Result<()> {
         ],
     )?);
 
-    set_up_expirations(Arc::clone(&db));
+    set_up_expirations(&db);
 
     axum::Server::bind(&"0.0.0.0:8081".parse()?)
         .serve(
@@ -68,7 +68,7 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-fn set_up_expirations(db: Arc<DB>) {
+fn set_up_expirations(db: &Arc<DB>) {
     let mut corrupted = 0;
     let mut expired = 0;
     let mut pending = 0;
@@ -77,7 +77,7 @@ fn set_up_expirations(db: Arc<DB>) {
 
     let meta_cf = db.cf_handle(META_CF_NAME).unwrap();
 
-    let db_ref = Arc::clone(&db);
+    let db_ref = Arc::clone(db);
 
     let delete_entry = move |key: &[u8]| {
         let blob_cf = db_ref.cf_handle(BLOB_CF_NAME).unwrap();
@@ -91,7 +91,7 @@ fn set_up_expirations(db: Arc<DB>) {
     };
 
     for (key, value) in db.iterator_cf(meta_cf, IteratorMode::Start) {
-        let expires = if let Ok(value) = bincode::deserialize::<Expiration>(&value) {
+        let expiration = if let Ok(value) = bincode::deserialize::<Expiration>(&value) {
             value
         } else {
             corrupted += 1;
@@ -99,7 +99,7 @@ fn set_up_expirations(db: Arc<DB>) {
             continue;
         };
 
-        let expiration_time = match expires {
+        let expiration_time = match expiration {
             Expiration::BurnAfterReading => {
                 panic!("Got burn after reading expiration time? Invariant violated");
             }
@@ -107,16 +107,16 @@ fn set_up_expirations(db: Arc<DB>) {
         };
 
         let sleep_duration = (expiration_time - Utc::now()).to_std().unwrap_or_default();
-        if sleep_duration != Duration::default() {
+        if sleep_duration == Duration::default() {
+            expired += 1;
+            delete_entry(&key);
+        } else {
             pending += 1;
             let delete_entry_ref = delete_entry.clone();
             task::spawn_blocking(move || async move {
                 tokio::time::sleep(sleep_duration).await;
                 delete_entry_ref(&key);
             });
-        } else {
-            expired += 1;
-            delete_entry(&key);
         }
     }
 
@@ -125,6 +125,7 @@ fn set_up_expirations(db: Arc<DB>) {
     } else {
         warn!("Found {} corrupted pastes.", corrupted);
     }
+
     info!("Found {} expired pastes.", expired);
     info!("Found {} active pastes.", pending);
     info!("Cleanup timers have been initialized.");

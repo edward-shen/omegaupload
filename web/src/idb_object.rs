@@ -17,7 +17,7 @@ impl<State: IdbObjectState> IdbObject<State> {
 
 impl From<IdbObject<Ready>> for Object {
     fn from(db_object: IdbObject<Ready>) -> Self {
-        match Object::from_entries(db_object.as_ref()) {
+        match Self::from_entries(db_object.as_ref()) {
             Ok(o) => o,
             // SAFETY: IdbObject maintains the invariant that it can eventually
             // be constructed into a JS object.
@@ -49,6 +49,12 @@ impl IdbObject<NeedsType> {
 
     pub fn string(self) -> IdbObject<NeedsExpiration> {
         self.add_tuple("type", &JsString::from("string"))
+    }
+}
+
+impl Default for IdbObject<NeedsType> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
