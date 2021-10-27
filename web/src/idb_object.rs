@@ -31,6 +31,10 @@ impl IdbObject<NeedsType> {
         Self(Array::new(), PhantomData)
     }
 
+    pub fn archive(self) -> IdbObject<NeedsExpiration> {
+        self.add_tuple("type", &JsString::from("archive"))
+    }
+
     pub fn video(self) -> IdbObject<NeedsExpiration> {
         self.add_tuple("type", &JsString::from("video"))
     }

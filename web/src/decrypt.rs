@@ -1,4 +1,5 @@
 use std::fmt::{Display, Formatter};
+use std::io::Cursor;
 use std::sync::Arc;
 
 use gloo_console::log;
@@ -6,6 +7,13 @@ use js_sys::{Array, Uint8Array};
 use omegaupload_common::crypto::{open_in_place, Key, Nonce};
 use wasm_bindgen::JsCast;
 use web_sys::Blob;
+use serde::Serialize;
+
+#[derive(Clone, Serialize)]
+pub struct ArchiveMeta {
+    name: String,
+    file_size: usize,
+}
 
 #[derive(Clone)]
 pub enum DecryptedData {
@@ -14,6 +22,7 @@ pub enum DecryptedData {
     Image(Arc<Blob>, usize),
     Audio(Arc<Blob>),
     Video(Arc<Blob>),
+    Archive(Arc<Blob>, Vec<ArchiveMeta>),
 }
 
 fn now() -> f64 {
@@ -70,6 +79,7 @@ pub fn decrypt(
         log!(format!("Blob conversion completed in {}ms", now() - start));
 
         let mime_type = tree_magic_mini::from_u8(container);
+        log!("Mimetype: ", mime_type);
 
         if mime_type.starts_with("image/") || mime_type == "application/x-riff" {
             Ok(DecryptedData::Image(blob, container.len()))
@@ -77,6 +87,28 @@ pub fn decrypt(
             Ok(DecryptedData::Audio(blob))
         } else if mime_type.starts_with("video/") || mime_type == "application/x-matroska" {
             Ok(DecryptedData::Video(blob))
+        } else if mime_type == "application/zip" {
+            let mut entries = vec![];
+            let cursor = Cursor::new(container);
+            if let Ok(mut zip) = zip::ZipArchive::new(cursor) {
+                for i in 0..zip.len() {
+                    match zip.by_index(i) {
+                        Ok(file) => {
+                            entries.push(ArchiveMeta{name: file.name().to_string(), file_size: file.size() as usize})
+                        },
+                        Err(err) => {
+                            match err {
+                                zip::result::ZipError::UnsupportedArchive(s) => { log!("Unsupported: ", s.to_string()); }
+                                _ => { log!(format!("Error: {}", err)); }
+                            }
+                        }
+                    }
+                }
+            }
+            Ok(DecryptedData::Archive(blob, entries))
+        } else if mime_type == "application/gzip" {
+            let entries = vec![];
+            Ok(DecryptedData::Archive(blob, entries))
         } else {
             Ok(DecryptedData::Blob(blob))
         }

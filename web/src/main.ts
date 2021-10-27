@@ -25,6 +25,9 @@ function loadFromDb() {
         case "video":
           createVideoPasteUi(data);
           break;
+        case "archive":
+          createArchivePasteUi(data);
+          break;
         default:
           renderMessage("Something went wrong. Try clearing local data.");
           break;
@@ -131,6 +134,48 @@ function createAudioPasteUi({ expiration, data }) {
 
 function createVideoPasteUi({ expiration, data }) {
   createMultiMediaPasteUi("video", expiration, data, "Download");
+}
+
+function createArchivePasteUi({ expiration, data, entries }) {
+  let bodyEle = document.getElementsByTagName("body")[0];
+  bodyEle.textContent = '';
+
+  let mainEle = document.createElement("main");
+  mainEle.classList.add("hljs");
+  mainEle.classList.add("centered");
+  mainEle.classList.add("fullscreen");
+
+  const downloadLink = URL.createObjectURL(data);
+
+  let expirationEle = document.createElement("p");
+  expirationEle.textContent = expiration;
+  mainEle.appendChild(expirationEle);
+
+  let mediaEle = document.createElement("table");
+  mediaEle.style.width = "50%";
+  const tr = mediaEle.insertRow();
+  const tdName = tr.insertCell();
+  tdName.appendChild(document.createTextNode("Name"));
+  const tdSize = tr.insertCell();
+  tdSize.appendChild(document.createTextNode("File Size"));
+  for (const entry of entries) {
+    const tr = mediaEle.insertRow();
+    const tdName = tr.insertCell();
+    tdName.appendChild(document.createTextNode(entry.name));
+    const tdSize = tr.insertCell();
+    tdSize.appendChild(document.createTextNode(entry.file_size));
+  }
+  mainEle.appendChild(mediaEle);
+
+  let downloadEle = document.createElement("a");
+  downloadEle.href = downloadLink;
+  downloadEle.download = window.location.pathname;
+  downloadEle.classList.add("hljs-meta");
+  mainEle.appendChild(downloadEle);
+
+  bodyEle.appendChild(mainEle);
+
+  downloadEle.textContent = "Download";
 }
 
 function createMultiMediaPasteUi(tag, expiration, data, on_create?) {

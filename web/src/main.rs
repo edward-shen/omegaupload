@@ -8,7 +8,7 @@ use decrypt::DecryptedData;
 use gloo_console::{error, log};
 use http::uri::PathAndQuery;
 use http::{StatusCode, Uri};
-use js_sys::{JsString, Object, Uint8Array};
+use js_sys::{JsString, Object, Uint8Array, Array};
 use omegaupload_common::crypto::{Key, Nonce};
 use omegaupload_common::{hash, Expiration, PartialParsedUrl};
 use reqwasm::http::Request;
@@ -191,6 +191,16 @@ async fn fetch_resources(
                         .video()
                         .expiration_text(&expires)
                         .data(blob),
+                    DecryptedData::Archive(blob, entries) => IdbObject::new()
+                        .archive()
+                        .expiration_text(&expires)
+                        .data(blob)
+                        .extra(
+                            "entries",
+                            JsValue::from(entries.into_iter()
+                                .filter_map(|x| JsValue::from_serde(x).ok())
+                                .collect::<Array>())
+                            ),
                 };
 
                 let put_action = transaction
