@@ -124,7 +124,9 @@ function createBlobPasteUi(data) {
 function createImagePasteUi({ expiration, data, file_size }) {
   createMultiMediaPasteUi("img", expiration, data, (downloadEle, imgEle) => {
     imgEle.onload = () => {
-      downloadEle.textContent = "Download " + file_size + " \u2014 " + imgEle.naturalWidth + " by " + imgEle.naturalHeight;
+      let width = imgEle.naturalWidth || imgEle.width;
+      let height = imgEle.naturalHeight || imgEle.height;
+      downloadEle.textContent = "Download " + file_size + " \u2014 " + width + " by " + height;
     }
   });
 }
