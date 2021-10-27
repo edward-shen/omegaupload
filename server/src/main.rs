@@ -10,10 +10,11 @@ use axum::extract::{Extension, Path, TypedHeader};
 use axum::handler::{get, post};
 use axum::http::header::EXPIRES;
 use axum::http::StatusCode;
+use axum::response::Html;
 use axum::{service, AddExtensionLayer, Router};
 use chrono::Utc;
 use headers::HeaderMap;
-use omegaupload_common::Expiration;
+use omegaupload_common::{Expiration, API_ENDPOINT};
 use rand::thread_rng;
 use rand::Rng;
 use rocksdb::{ColumnFamilyDescriptor, IteratorMode};
@@ -61,11 +62,11 @@ async fn main() -> Result<()> {
                 .route("/", post(upload::<SHORT_CODE_SIZE>))
                 .route(
                     "/:code",
-                    get(|| async { include_str!("../../dist/index.html") }),
+                    get(|| async { Html(include_str!("../../dist/index.html")) }),
                 )
                 .nest("/static", root_service)
                 .route(
-                    "/api/:code",
+                    &format!("{}{}", API_ENDPOINT.to_string(), "/:code"),
                     get(paste::<SHORT_CODE_SIZE>).delete(delete::<SHORT_CODE_SIZE>),
                 )
                 .layer(AddExtensionLayer::new(db))

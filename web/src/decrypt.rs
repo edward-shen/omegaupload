@@ -5,9 +5,9 @@ use std::sync::Arc;
 use gloo_console::log;
 use js_sys::{Array, Uint8Array};
 use omegaupload_common::crypto::{open_in_place, Key, Nonce};
-use wasm_bindgen::JsCast;
-use web_sys::Blob;
 use serde::Serialize;
+use wasm_bindgen::JsCast;
+use web_sys::{Blob, BlobPropertyBag};
 
 #[derive(Clone, Serialize)]
 pub struct ArchiveMeta {
@@ -66,6 +66,9 @@ pub fn decrypt(
     if let Ok(decrypted) = std::str::from_utf8(container) {
         Ok(DecryptedData::String(Arc::new(decrypted.to_owned())))
     } else {
+        let mime_type = tree_magic_mini::from_u8(container);
+        log!("Mimetype: ", mime_type);
+
         log!("Blob conversion started.");
         let start = now();
         let blob_chunks = Array::new_with_length(container.chunks(65536).len().try_into().unwrap());
@@ -74,12 +77,16 @@ pub fn decrypt(
             array.copy_from(chunk);
             blob_chunks.set(i.try_into().unwrap(), array.dyn_into().unwrap());
         }
-        let blob =
-            Arc::new(Blob::new_with_u8_array_sequence(blob_chunks.dyn_ref().unwrap()).unwrap());
+        let mut blob_props = BlobPropertyBag::new();
+        blob_props.type_(mime_type);
+        let blob = Arc::new(
+            Blob::new_with_u8_array_sequence_and_options(
+                blob_chunks.dyn_ref().unwrap(),
+                &blob_props,
+            )
+            .unwrap(),
+        );
         log!(format!("Blob conversion completed in {}ms", now() - start));
-
-        let mime_type = tree_magic_mini::from_u8(container);
-        log!("Mimetype: ", mime_type);
 
         if mime_type.starts_with("image/") || mime_type == "application/x-riff" {
             Ok(DecryptedData::Image(blob, container.len()))
@@ -93,15 +100,18 @@ pub fn decrypt(
             if let Ok(mut zip) = zip::ZipArchive::new(cursor) {
                 for i in 0..zip.len() {
                     match zip.by_index(i) {
-                        Ok(file) => {
-                            entries.push(ArchiveMeta{name: file.name().to_string(), file_size: file.size() as usize})
-                        },
-                        Err(err) => {
-                            match err {
-                                zip::result::ZipError::UnsupportedArchive(s) => { log!("Unsupported: ", s.to_string()); }
-                                _ => { log!(format!("Error: {}", err)); }
+                        Ok(file) => entries.push(ArchiveMeta {
+                            name: file.name().to_string(),
+                            file_size: file.size() as usize,
+                        }),
+                        Err(err) => match err {
+                            zip::result::ZipError::UnsupportedArchive(s) => {
+                                log!("Unsupported: ", s.to_string());
                             }
-                        }
+                            _ => {
+                                log!(format!("Error: {}", err));
+                            }
+                        },
                     }
                 }
             }

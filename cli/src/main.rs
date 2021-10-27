@@ -7,7 +7,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use atty::Stream;
 use clap::Parser;
 use omegaupload_common::crypto::{gen_key_nonce, open_in_place, seal_in_place, Key};
-use omegaupload_common::{base64, hash, Expiration, ParsedUrl, Url};
+use omegaupload_common::{base64, hash, Expiration, ParsedUrl, Url, API_ENDPOINT};
 use reqwest::blocking::Client;
 use reqwest::header::EXPIRES;
 use reqwest::StatusCode;
@@ -99,7 +99,12 @@ fn handle_upload(mut url: Url, password: Option<SecretString>) -> Result<()> {
     Ok(())
 }
 
-fn handle_download(url: ParsedUrl) -> Result<()> {
+fn handle_download(mut url: ParsedUrl) -> Result<()> {
+    url.sanitized_url.set_path(&dbg!(format!(
+        "{}{}",
+        API_ENDPOINT,
+        url.sanitized_url.path()
+    )));
     let res = Client::new()
         .get(url.sanitized_url)
         .send()
@@ -109,7 +114,8 @@ fn handle_download(url: ParsedUrl) -> Result<()> {
         bail!("Got bad response from server: {}", res.status());
     }
 
-    let expiration_text = dbg!(res.headers())
+    let expiration_text = res
+        .headers()
         .get(EXPIRES)
         .and_then(|v| Expiration::try_from(v).ok())
         .as_ref()

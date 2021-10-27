@@ -6,6 +6,9 @@ set -euxo pipefail
 yarn
 trunk build --release
 
+sed -i 's#/index#/static/index#g' dist/index.html
+sed -i 's#stylesheet" href="/main#stylesheet" href="/static/main#g' dist/index.html
+
 # Build server
 cargo build --release --bin omegaupload-server
 
@@ -19,3 +22,7 @@ find dist -type f -exec mv {} dist/static/ ";"
 
 strip target/release/omegaupload-server
 cp target/release/omegaupload-server dist/omegaupload-server
+
+tar -cvf dist.tar dist
+rm -r dist.tar.zst
+zstd -T0 --ultra --rm -22 dist.tar

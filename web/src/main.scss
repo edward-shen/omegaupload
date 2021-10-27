@@ -40,8 +40,12 @@ main {
   font-family: 'Mplus Code', sans-serif;
 }
 
-.hljs-ln td.hljs-ln-numbers {
+.align-right {
   text-align: right;
+}
+
+.hljs-ln td.hljs-ln-numbers {
+  @extend .align-right;
   padding-right: $padding;
 }
 
@@ -73,4 +77,15 @@ img, audio, video {
 
 .primary {
   @extend .hljs;
+}
+
+.archive {
+  &-table {
+    width: 100%;
+  }
+
+  &-file-size {
+    @extend .align-right;
+    padding-left: $padding;
+  }
 }

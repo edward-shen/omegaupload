@@ -62,8 +62,9 @@ function createStringPasteUi(data) {
   let preEle = document.createElement("pre");
   preEle.classList.add("paste");
 
-  let headerEle = document.createElement("header");
+  let headerEle = document.createElement("p");
   headerEle.classList.add("unselectable");
+  headerEle.classList.add("centered");
   headerEle.textContent = data.expiration;
   preEle.appendChild(headerEle);
 
@@ -141,41 +142,58 @@ function createArchivePasteUi({ expiration, data, entries }) {
   bodyEle.textContent = '';
 
   let mainEle = document.createElement("main");
-  mainEle.classList.add("hljs");
-  mainEle.classList.add("centered");
-  mainEle.classList.add("fullscreen");
 
-  const downloadLink = URL.createObjectURL(data);
+  let sectionEle = document.createElement("section");
+  sectionEle.classList.add("paste");
 
   let expirationEle = document.createElement("p");
   expirationEle.textContent = expiration;
-  mainEle.appendChild(expirationEle);
-
-  let mediaEle = document.createElement("table");
-  mediaEle.style.width = "50%";
-  const tr = mediaEle.insertRow();
-  const tdName = tr.insertCell();
-  tdName.appendChild(document.createTextNode("Name"));
-  const tdSize = tr.insertCell();
-  tdSize.appendChild(document.createTextNode("File Size"));
-  for (const entry of entries) {
-    const tr = mediaEle.insertRow();
-    const tdName = tr.insertCell();
-    tdName.appendChild(document.createTextNode(entry.name));
-    const tdSize = tr.insertCell();
-    tdSize.appendChild(document.createTextNode(entry.file_size));
-  }
-  mainEle.appendChild(mediaEle);
+  expirationEle.classList.add("centered");
+  sectionEle.appendChild(expirationEle);
 
   let downloadEle = document.createElement("a");
-  downloadEle.href = downloadLink;
+  downloadEle.href = URL.createObjectURL(data);
   downloadEle.download = window.location.pathname;
-  downloadEle.classList.add("hljs-meta");
-  mainEle.appendChild(downloadEle);
-
-  bodyEle.appendChild(mainEle);
-
   downloadEle.textContent = "Download";
+  downloadEle.classList.add("hljs-meta");
+  downloadEle.classList.add("centered");
+  sectionEle.appendChild(downloadEle);
+
+  sectionEle.appendChild(document.createElement("hr"));
+
+  let mediaEle = document.createElement("table");
+  mediaEle.classList.add("archive-table");
+  const tr = mediaEle.insertRow();
+  tr.classList.add("hljs-title");
+  const tdName = tr.insertCell();
+  tdName.textContent = "Name";
+  const tdSize = tr.insertCell();
+  tdSize.classList.add("align-right");
+  tdSize.textContent = "File Size";
+
+  // Because it's a stable sort, we can first sort by name (to get all folder
+  // items grouped together) and then sort by if there's a / or not.
+  entries.sort((a, b) => {
+    return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+  });
+
+  entries.sort((a, b) => {
+    return b.name.includes("/") - a.name.includes("/");
+  });
+
+  for (const { name, file_size } of entries) {
+    const tr = mediaEle.insertRow();
+    const tdName = tr.insertCell();
+    tdName.textContent = name;
+    const tdSize = tr.insertCell();
+    tdSize.textContent = file_size;
+    tdSize.classList.add("align-right");
+    tdSize.classList.add("hljs-number");
+  }
+
+  sectionEle.appendChild(mediaEle);
+  mainEle.appendChild(sectionEle);
+  bodyEle.appendChild(mainEle);
 }
 
 function createMultiMediaPasteUi(tag, expiration, data, on_create?) {
@@ -197,6 +215,7 @@ function createMultiMediaPasteUi(tag, expiration, data, on_create?) {
   mediaEle.src = downloadLink;
   mediaEle.controls = true;
   mainEle.appendChild(mediaEle);
+
 
   let downloadEle = document.createElement("a");
   downloadEle.href = downloadLink;

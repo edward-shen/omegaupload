@@ -16,6 +16,8 @@ pub use url::Url;
 
 use crate::crypto::{Key, Nonce};
 
+pub const API_ENDPOINT: &str = "/api";
+
 pub mod base64 {
     /// URL-safe Base64 encoding.
     pub fn encode(input: impl AsRef<[u8]>) -> String {
@@ -153,13 +155,13 @@ impl From<&str> for PartialParsedUrl {
         for (key, value) in args {
             match (key, value) {
                 ("key", Some(value)) => {
-                    decryption_key = dbg!(base64::decode(value).map(|k| *Key::from_slice(&k)).ok());
+                    decryption_key = base64::decode(value).map(|k| *Key::from_slice(&k)).ok();
                 }
                 ("pw", _) => {
                     needs_password = true;
                 }
                 ("nonce", Some(value)) => {
-                    nonce = dbg!(base64::decode(value).as_deref().map(Nonce::from_slice).ok());
+                    nonce = base64::decode(value).as_deref().map(Nonce::from_slice).ok();
                 }
                 _ => (),
             }
