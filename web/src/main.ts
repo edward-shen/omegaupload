@@ -177,6 +177,8 @@ function createArchivePasteUi({ expiration, data, entries }) {
     return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
   });
 
+  // This doesn't get sub directories and their folders, but hey it's close
+  // enough
   entries.sort((a, b) => {
     return b.name.includes("/") - a.name.includes("/");
   });
