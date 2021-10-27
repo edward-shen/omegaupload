@@ -22,11 +22,15 @@ struct Opts {
 #[derive(Parser)]
 enum Action {
     Upload {
+        /// The OmegaUpload instance to upload data to.
         url: Url,
+        /// Encrypt the uploaded paste with the provided password, preventing
+        /// public access.
         #[clap(short, long)]
         password: Option<SecretString>,
     },
     Download {
+        /// The paste to download.
         url: ParsedUrl,
     },
 }
