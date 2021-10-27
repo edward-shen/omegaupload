@@ -4,9 +4,6 @@
 [submodule "web/vendor/highlight.js"]
 	path = web/vendor/highlight.js
 	url = git@github.com:highlightjs/highlight.js.git
-[submodule "web/vendor/text-fragments-polyfill"]
-	path = web/vendor/text-fragments-polyfill
-	url = git@github.com:GoogleChromeLabs/text-fragments-polyfill.git
 [submodule "web/vendor/highlightjs-line-numbers.js"]
 	path = web/vendor/highlightjs-line-numbers.js
 	url = git@github.com:wcoder/highlightjs-line-numbers.js.git

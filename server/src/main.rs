@@ -1,5 +1,6 @@
 #![warn(clippy::nursery, clippy::pedantic)]
 
+use std::convert::Infallible;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -9,7 +10,7 @@ use axum::extract::{Extension, Path, TypedHeader};
 use axum::handler::{get, post};
 use axum::http::header::EXPIRES;
 use axum::http::StatusCode;
-use axum::{AddExtensionLayer, Router};
+use axum::{service, AddExtensionLayer, Router};
 use chrono::Utc;
 use headers::HeaderMap;
 use omegaupload_common::Expiration;
@@ -18,6 +19,7 @@ use rand::Rng;
 use rocksdb::{ColumnFamilyDescriptor, IteratorMode};
 use rocksdb::{Options, DB};
 use tokio::task;
+use tower_http::services::ServeDir;
 use tracing::{error, instrument, trace};
 use tracing::{info, warn};
 
@@ -50,12 +52,20 @@ async fn main() -> Result<()> {
 
     set_up_expirations(&db);
 
-    axum::Server::bind(&"0.0.0.0:8081".parse()?)
+    let root_service = service::get(ServeDir::new("static"))
+        .handle_error(|_| Ok::<_, Infallible>(StatusCode::NOT_FOUND));
+
+    axum::Server::bind(&"0.0.0.0:8080".parse()?)
         .serve(
             Router::new()
                 .route("/", post(upload::<SHORT_CODE_SIZE>))
                 .route(
                     "/:code",
+                    get(|| async { include_str!("../../dist/index.html") }),
+                )
+                .nest("/static", root_service)
+                .route(
+                    "/api/:code",
                     get(paste::<SHORT_CODE_SIZE>).delete(delete::<SHORT_CODE_SIZE>),
                 )
                 .layer(AddExtensionLayer::new(db))

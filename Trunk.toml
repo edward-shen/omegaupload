@@ -2,6 +2,10 @@
 [build]
 target = "web/index.html"
 release = true
+dist = "./dist"
+
+[clean]
+dist = "./dist"
 
 [[proxy]]
 backend = "http://localhost:8081"
