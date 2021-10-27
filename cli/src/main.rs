@@ -5,7 +5,7 @@ use std::io::{Read, Write};
 
 use anyhow::{anyhow, bail, Context, Result};
 use atty::Stream;
-use clap::Clap;
+use clap::Parser;
 use omegaupload_common::crypto::{gen_key_nonce, open_in_place, seal_in_place, Key};
 use omegaupload_common::{base64, hash, Expiration, ParsedUrl, Url};
 use reqwest::blocking::Client;
@@ -13,13 +13,13 @@ use reqwest::header::EXPIRES;
 use reqwest::StatusCode;
 use secrecy::{ExposeSecret, SecretString};
 
-#[derive(Clap)]
+#[derive(Parser)]
 struct Opts {
     #[clap(subcommand)]
     action: Action,
 }
 
-#[derive(Clap)]
+#[derive(Parser)]
 enum Action {
     Upload {
         url: Url,
