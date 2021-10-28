@@ -113,10 +113,11 @@ pub fn decrypt(
                 }
             }
         }
+
+        entries.sort_by(|a, b| a.name.cmp(&b.name));
         Ok(DecryptedData::Archive(blob, entries))
     } else if mime_type == "application/gzip" {
-        let entries = vec![];
-        Ok(DecryptedData::Archive(blob, entries))
+        Ok(DecryptedData::Archive(blob, vec![]))
     } else {
         Ok(DecryptedData::Blob(blob))
     }
