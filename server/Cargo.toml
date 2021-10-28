@@ -16,6 +16,7 @@ bytes = { version = "*", features = ["serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 # We just need to pull in whatever axum is pulling in
 headers = "*"
+lazy_static = "1"
 rand = "0.8"
 rocksdb = { version = "0.17", default_features = false, features = ["zstd"] }
 serde = { version = "1", features = ["derive"] }

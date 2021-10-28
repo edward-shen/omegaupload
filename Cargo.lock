@@ -947,6 +947,7 @@ dependencies = [
  "bytes",
  "chrono",
  "headers",
+ "lazy_static",
  "omegaupload-common",
  "rand",
  "rocksdb",

@@ -224,13 +224,31 @@ impl FromStr for ParsedUrl {
 #[derive(Serialize, Deserialize, Clone, Copy, Debug)]
 pub enum Expiration {
     BurnAfterReading,
+    BurnAfterReadingWithDeadline(DateTime<Utc>),
     UnixTime(DateTime<Utc>),
+}
+
+// This impl is used for the CLI
+impl FromStr for Expiration {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "read" => Ok(Self::BurnAfterReading),
+            "5m" => Ok(Self::UnixTime(Utc::now() + Duration::minutes(5))),
+            "10m" => Ok(Self::UnixTime(Utc::now() + Duration::minutes(10))),
+            "1h" => Ok(Self::UnixTime(Utc::now() + Duration::hours(1))),
+            "1d" => Ok(Self::UnixTime(Utc::now() + Duration::days(1))),
+            // We disallow permanent pastes
+            _ => Err(s.to_owned()),
+        }
+    }
 }
 
 impl Display for Expiration {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Expiration::BurnAfterReading => {
+            Expiration::BurnAfterReading | Expiration::BurnAfterReadingWithDeadline(_) => {
                 write!(f, "This item has been burned. You now have the only copy.")
             }
             Expiration::UnixTime(time) => write!(
@@ -256,19 +274,9 @@ impl Header for Expiration {
         Self: Sized,
         I: Iterator<Item = &'i HeaderValue>,
     {
-        match values
-            .next()
-            .ok_or_else(headers::Error::invalid)?
-            .as_bytes()
-        {
-            b"read" => Ok(Self::BurnAfterReading),
-            b"5m" => Ok(Self::UnixTime(Utc::now() + Duration::minutes(5))),
-            b"10m" => Ok(Self::UnixTime(Utc::now() + Duration::minutes(10))),
-            b"1h" => Ok(Self::UnixTime(Utc::now() + Duration::hours(1))),
-            b"1d" => Ok(Self::UnixTime(Utc::now() + Duration::days(1))),
-            // We disallow permanent pastes
-            _ => Err(headers::Error::invalid()),
-        }
+        let bytes = values.next().ok_or_else(headers::Error::invalid)?;
+
+        Self::try_from(bytes).map_err(|_| headers::Error::invalid())
     }
 
     fn encode<E: Extend<HeaderValue>>(&self, container: &mut E) {
@@ -282,7 +290,9 @@ impl From<&Expiration> for HeaderValue {
         // so we don't need the extra check.
         unsafe {
             Self::from_maybe_shared_unchecked(match expiration {
-                Expiration::BurnAfterReading => Bytes::from_static(b"0"),
+                Expiration::BurnAfterReadingWithDeadline(_) | Expiration::BurnAfterReading => {
+                    Bytes::from_static(b"0")
+                }
                 Expiration::UnixTime(duration) => Bytes::from(duration.to_rfc3339()),
             })
         }
@@ -294,6 +304,8 @@ impl From<Expiration> for HeaderValue {
         (&expiration).into()
     }
 }
+
+pub struct ParseHeaderValueError;
 
 #[cfg(feature = "wasm")]
 impl TryFrom<web_sys::Headers> for Expiration {
@@ -310,14 +322,19 @@ impl TryFrom<web_sys::Headers> for Expiration {
     }
 }
 
-pub struct ParseHeaderValueError;
+impl TryFrom<HeaderValue> for Expiration {
+    type Error = ParseHeaderValueError;
+
+    fn try_from(value: HeaderValue) -> Result<Self, Self::Error> {
+        Self::try_from(&value)
+    }
+}
 
 impl TryFrom<&HeaderValue> for Expiration {
     type Error = ParseHeaderValueError;
 
     fn try_from(value: &HeaderValue) -> Result<Self, Self::Error> {
-        value
-            .to_str()
+        std::str::from_utf8(value.as_bytes())
             .map_err(|_| ParseHeaderValueError)
             .and_then(Self::try_from)
     }
@@ -327,6 +344,10 @@ impl TryFrom<&str> for Expiration {
     type Error = ParseHeaderValueError;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
+        if value == "0" {
+            return Ok(Self::BurnAfterReading);
+        }
+
         value
             .parse::<DateTime<Utc>>()
             .map_err(|_| ParseHeaderValueError)

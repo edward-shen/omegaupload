@@ -14,6 +14,7 @@ use axum::response::Html;
 use axum::{service, AddExtensionLayer, Router};
 use chrono::Utc;
 use headers::HeaderMap;
+use lazy_static::lazy_static;
 use omegaupload_common::{Expiration, API_ENDPOINT};
 use rand::thread_rng;
 use rand::Rng;
@@ -30,6 +31,10 @@ mod short_code;
 
 const BLOB_CF_NAME: &str = "blob";
 const META_CF_NAME: &str = "meta";
+
+lazy_static! {
+    static ref MAX_PASTE_AGE: chrono::Duration = chrono::Duration::days(1);
+}
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -112,8 +117,10 @@ fn set_up_expirations(db: &Arc<DB>) {
 
         let expiration_time = match expiration {
             Expiration::BurnAfterReading => {
-                panic!("Got burn after reading expiration time? Invariant violated");
+                warn!("Found unbounded burn after reading. Defaulting to max age");
+                Utc::now() + *MAX_PASTE_AGE
             }
+            Expiration::BurnAfterReadingWithDeadline(deadline) => deadline,
             Expiration::UnixTime(time) => time,
         };
 
@@ -152,6 +159,15 @@ async fn upload<const N: usize>(
         return Err(StatusCode::BAD_REQUEST);
     }
 
+    if let Some(header) = maybe_expires {
+        if let Expiration::UnixTime(time) = header.0 {
+            if (time - Utc::now()) > *MAX_PASTE_AGE {
+                warn!("{} exceeds allowed paste lifetime", time);
+                return Err(StatusCode::BAD_REQUEST);
+            }
+        }
+    }
+
     // 3GB max; this is a soft-limit of RocksDb
     if body.len() >= 3_221_225_472 {
         return Err(StatusCode::PAYLOAD_TOO_LARGE);
@@ -185,10 +201,6 @@ async fn upload<const N: usize>(
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
     };
 
-    trace!("Serializing paste...");
-
-    trace!("Finished serializing paste.");
-
     let db_ref = Arc::clone(&db);
     match task::spawn_blocking(move || {
         let blob_cf = db_ref.cf_handle(BLOB_CF_NAME).unwrap();
@@ -196,6 +208,11 @@ async fn upload<const N: usize>(
         let data = bincode::serialize(&body).expect("bincode to serialize");
         db_ref.put_cf(blob_cf, key, data)?;
         let expires = maybe_expires.map(|v| v.0).unwrap_or_default();
+        let expires = if let Expiration::BurnAfterReading = expires {
+            Expiration::BurnAfterReadingWithDeadline(Utc::now() + *MAX_PASTE_AGE)
+        } else {
+            expires
+        };
         let meta = bincode::serialize(&expires).expect("bincode to serialize");
         if db_ref.put_cf(meta_cf, key, meta).is_err() {
             // try and roll back on metadata write failure
@@ -207,7 +224,9 @@ async fn upload<const N: usize>(
     {
         Ok(Ok(_)) => {
             if let Some(expires) = maybe_expires {
-                if let Expiration::UnixTime(expiration_time) = expires.0 {
+                if let Expiration::UnixTime(expiration_time)
+                | Expiration::BurnAfterReadingWithDeadline(expiration_time) = expires.0
+                {
                     let sleep_duration =
                         (expiration_time - Utc::now()).to_std().unwrap_or_default();
 
@@ -302,16 +321,33 @@ async fn paste<const N: usize>(
     };
 
     // Check if we need to burn after read
-    if matches!(metadata, Expiration::BurnAfterReading) {
-        let join_handle = task::spawn_blocking(move || db.delete(key))
-            .await
-            .map_err(|e| {
-                error!("Failed to join handle: {}", e);
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?;
+    if matches!(
+        metadata,
+        Expiration::BurnAfterReading | Expiration::BurnAfterReadingWithDeadline(_)
+    ) {
+        let join_handle = task::spawn_blocking(move || {
+            let blob_cf = db.cf_handle(BLOB_CF_NAME).unwrap();
+            let meta_cf = db.cf_handle(META_CF_NAME).unwrap();
+            if let Err(e) = db.delete_cf(blob_cf, url.as_bytes()) {
+                warn!("{}", e);
+                return Err(());
+            }
 
-        join_handle.map_err(|e| {
-            error!("Failed to burn paste after read: {}", e);
+            if let Err(e) = db.delete_cf(meta_cf, url.as_bytes()) {
+                warn!("{}", e);
+                return Err(());
+            }
+
+            Ok(())
+        })
+        .await
+        .map_err(|e| {
+            error!("Failed to join handle: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+        join_handle.map_err(|_| {
+            error!("Failed to burn paste after read");
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
     }

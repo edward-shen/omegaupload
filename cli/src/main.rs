@@ -7,7 +7,9 @@ use anyhow::{anyhow, bail, Context, Result};
 use atty::Stream;
 use clap::Parser;
 use omegaupload_common::crypto::{gen_key_nonce, open_in_place, seal_in_place, Key};
-use omegaupload_common::{base64, hash, Expiration, ParsedUrl, Url, API_ENDPOINT};
+use omegaupload_common::{
+    base64, hash, Expiration, ParsedUrl, Url, API_ENDPOINT, EXPIRATION_HEADER_NAME,
+};
 use reqwest::blocking::Client;
 use reqwest::header::EXPIRES;
 use reqwest::StatusCode;
@@ -28,6 +30,8 @@ enum Action {
         /// public access.
         #[clap(short, long)]
         password: Option<SecretString>,
+        #[clap(short, long)]
+        duration: Option<Expiration>,
     },
     Download {
         /// The paste to download.
@@ -39,14 +43,22 @@ fn main() -> Result<()> {
     let opts = Opts::parse();
 
     match opts.action {
-        Action::Upload { url, password } => handle_upload(url, password),
+        Action::Upload {
+            url,
+            password,
+            duration,
+        } => handle_upload(url, password, duration),
         Action::Download { url } => handle_download(url),
     }?;
 
     Ok(())
 }
 
-fn handle_upload(mut url: Url, password: Option<SecretString>) -> Result<()> {
+fn handle_upload(
+    mut url: Url,
+    password: Option<SecretString>,
+    duration: Option<Expiration>,
+) -> Result<()> {
     url.set_fragment(None);
 
     if atty::is(Stream::Stdin) {
@@ -76,11 +88,13 @@ fn handle_upload(mut url: Url, password: Option<SecretString>) -> Result<()> {
         (container, nonce, key, pw_used)
     };
 
-    let res = Client::new()
-        .post(url.as_ref())
-        .body(data)
-        .send()
-        .context("Request to server failed")?;
+    let mut res = Client::new().post(url.as_ref());
+
+    if let Some(duration) = duration {
+        res = res.header(&*EXPIRATION_HEADER_NAME, duration);
+    }
+
+    let res = res.body(data).send().context("Request to server failed")?;
 
     if res.status() != StatusCode::OK {
         bail!("Upload failed. Got HTTP error {}", res.status());
@@ -104,11 +118,8 @@ fn handle_upload(mut url: Url, password: Option<SecretString>) -> Result<()> {
 }
 
 fn handle_download(mut url: ParsedUrl) -> Result<()> {
-    url.sanitized_url.set_path(&dbg!(format!(
-        "{}{}",
-        API_ENDPOINT,
-        url.sanitized_url.path()
-    )));
+    url.sanitized_url
+        .set_path(&format!("{}{}", API_ENDPOINT, url.sanitized_url.path()));
     let res = Client::new()
         .get(url.sanitized_url)
         .send()
