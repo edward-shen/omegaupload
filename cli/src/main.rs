@@ -1,7 +1,7 @@
 #![warn(clippy::nursery, clippy::pedantic)]
 #![deny(unsafe_code)]
 
-use std::io::{Read, Write};
+use std::io::Write;
 use std::path::PathBuf;
 
 use anyhow::{anyhow, bail, Context, Result};
@@ -15,6 +15,7 @@ use omegaupload_common::{
 use reqwest::blocking::Client;
 use reqwest::header::EXPIRES;
 use reqwest::StatusCode;
+use rpassword::prompt_password_stderr;
 
 #[derive(Parser)]
 struct Opts {
@@ -65,16 +66,12 @@ fn handle_upload(
 ) -> Result<()> {
     url.set_fragment(None);
 
-    if atty::is(Stream::Stdin) {
-        bail!("This tool requires non interactive CLI. Pipe something in!");
-    }
-
     let (data, key) = {
         let mut container = std::fs::read(path)?;
         let password = if password {
-            let mut buffer = vec![];
-            std::io::stdin().read_to_end(&mut buffer)?;
-            Some(SecretVec::new(buffer))
+            let maybe_password =
+                prompt_password_stderr("Please set the password for this paste: ")?;
+            Some(SecretVec::new(maybe_password.into_bytes()))
         } else {
             None
         };
@@ -140,21 +137,12 @@ fn handle_download(mut url: ParsedUrl) -> Result<()> {
     let mut password = None;
     if url.needs_password {
         // Only print prompt on interactive, else it messes with output
-        if atty::is(Stream::Stdout) {
-            print!("Please enter the password to access this document: ");
-            std::io::stdout().flush()?;
-        }
-        let mut input = String::new();
-        std::io::stdin().read_line(&mut input)?;
-        input.pop(); // last character is \n, we need to drop it.
-        password = Some(input);
+        let maybe_password =
+            prompt_password_stderr("Please enter the password to access this paste: ")?;
+        password = Some(SecretVec::new(maybe_password.into_bytes()));
     }
 
-    open_in_place(
-        &mut data,
-        &url.decryption_key,
-        password.map(|v| SecretVec::new(v.into_bytes())),
-    )?;
+    open_in_place(&mut data, &url.decryption_key, password)?;
 
     if atty::is(Stream::Stdout) {
         if let Ok(data) = String::from_utf8(data) {

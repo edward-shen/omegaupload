@@ -123,9 +123,8 @@ pub fn open_in_place(
     key: &Secret<Key>,
     password: Option<SecretVec<u8>>,
 ) -> Result<(), Error> {
-    let buffer_len = data.len();
     let pw_key = if let Some(password) = password {
-        let salt_buf = data.split_off(buffer_len - Salt::SIZE);
+        let salt_buf = data.split_off(data.len() - Salt::SIZE);
         let argon = Argon2::default();
         let mut pw_key = Key::default();
         argon.hash_password_into(password.expose_secret(), &salt_buf, &mut pw_key)?;
@@ -134,7 +133,7 @@ pub fn open_in_place(
         None
     };
 
-    let nonce = Nonce::from_slice(&data.split_off(buffer_len - Nonce::SIZE));
+    let nonce = Nonce::from_slice(&data.split_off(data.len() - Nonce::SIZE));
 
     // At this point we should have a buffer that's only the ciphertext.
 
