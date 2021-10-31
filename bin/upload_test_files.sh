@@ -17,6 +17,6 @@ for file in $TEST_PATH; do
 done
 
 for file in $TEST_PATH; do
-  printf "%${PADDING}s: " "${file#$TEST_PATH}"
+  printf "%$((PADDING - ${#TEST_PATH} + 1))s: " "${file#$TEST_PATH}"
   ./target/release/omegaupload-cli upload "$PASTE_URL" "$file"
 done
