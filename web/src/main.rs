@@ -90,7 +90,7 @@ fn main() {
             let pw = window().prompt_with_message("A password is required to decrypt this paste:");
 
             match pw {
-                Ok(Some(password)) if password.is_empty() => {
+                Ok(Some(password)) if !password.is_empty() => {
                     break Some(SecretVec::new(password.into_bytes()));
                 }
                 Err(_) => {
