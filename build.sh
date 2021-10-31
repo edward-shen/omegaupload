@@ -24,5 +24,5 @@ strip target/release/omegaupload-server
 cp target/release/omegaupload-server dist/omegaupload-server
 
 tar -cvf dist.tar dist
-rm -r dist.tar.zst
+rm -rf dist.tar.zst
 zstd -T0 --ultra --rm -22 dist.tar
