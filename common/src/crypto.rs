@@ -92,7 +92,7 @@ pub fn open_in_place(data: &mut Vec<u8>, key: &Key, password: Option<&str>) -> R
         None
     };
 
-    let nonce = Nonce::from_slice(&data.split_off(Nonce::SIZE));
+    let nonce = Nonce::from_slice(&data.split_off(buffer_len - Nonce::SIZE));
 
     // At this point we should have a buffer that's only the ciphertext.
 
@@ -111,7 +111,7 @@ pub fn open_in_place(data: &mut Vec<u8>, key: &Key, password: Option<&str>) -> R
 #[must_use]
 fn gen_key_nonce() -> (Key, Nonce) {
     let mut rng = thread_rng();
-    let mut key: Key = GenericArray::default();
+    let mut key = GenericArray::default();
     rng.fill(key.as_mut_slice());
     let mut nonce = Nonce::default();
     rng.fill(nonce.as_mut_slice());
