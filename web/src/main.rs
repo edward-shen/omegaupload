@@ -92,14 +92,20 @@ fn main() {
             let pw = window().prompt_with_message("A password is required to decrypt this paste:");
 
             match pw {
+                // Ok button was entered.
                 Ok(Some(password)) if !password.is_empty() => {
                     break Some(SecretVec::new(password.into_bytes()));
                 }
-                Err(_) => {
+                // Cancel button was entered.
+                Ok(None) => {
                     render_message("This paste requires a password.".into());
                     return;
                 }
-                _ => (),
+                e => {
+                    render_message("Internal error occurred.".into());
+                    error!(format!("Error occurred at pw prompt: {:?}", e));
+                    return;
+                }
             }
         }
     } else {
