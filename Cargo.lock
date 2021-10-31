@@ -945,7 +945,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "omegaupload-cli"
+name = "omegaupload"
 version = "0.1.0"
 dependencies = [
  "anyhow",
