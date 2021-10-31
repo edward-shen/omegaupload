@@ -6,16 +6,16 @@ OmegaUpload is a zero-knowledge temporary file hosting service.
 
 ```bash
 # Uploading a file:
-$ omegaupload-cli upload https://paste.example.com path/to/file
+$ omegaupload upload https://paste.example.com path/to/file
 https://paste.example.com/PgRG8Hfrr9rR#I1FG2oejo2gSjB3Ym1mEmRfcN4X8GXc2pZtZeiSsWFo=
 
 # Uploading a file with a password:
-$ omegaupload-cli upload -p https://paste.example.com path/to/file
+$ omegaupload upload -p https://paste.example.com path/to/file
 Please set the password for this paste:
 https://paste.crabravers.club/862vhXVp3v9R#key:tbGxzHBNnXjS2eq89X9uvZKz_i8bvapLPEp8g0waQrc=!pw
 
 # Downloading a file:
-$ omegaupload-cli download https://paste.example.com/PgRG8Hfrr9rR#I1FG2oejo2gSjB3Ym1mEmRfcN4X8GXc2pZtZeiSsWFo=
+$ omegaupload download https://paste.example.com/PgRG8Hfrr9rR#I1FG2oejo2gSjB3Ym1mEmRfcN4X8GXc2pZtZeiSsWFo=
 ```
 
 ## Features
