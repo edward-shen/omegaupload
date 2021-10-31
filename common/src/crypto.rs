@@ -20,7 +20,7 @@
 
 use std::ops::{Deref, DerefMut};
 
-use argon2::Argon2;
+use argon2::{Argon2, ParamsBuilder};
 use chacha20poly1305::aead::generic_array::sequence::GenericSequence;
 use chacha20poly1305::aead::generic_array::GenericArray;
 use chacha20poly1305::aead::{AeadInPlace, NewAead};
@@ -152,7 +152,7 @@ pub fn open_in_place(
 ) -> Result<(), Error> {
     let pw_key = if let Some(password) = password {
         let salt_buf = data.split_off(data.len() - Salt::SIZE);
-        let argon = Argon2::default();
+        let argon = get_argon2();
         let mut pw_key = Key::default();
         argon
             .hash_password_into(password.expose_secret(), &salt_buf, &mut pw_key)
@@ -255,11 +255,32 @@ impl AsRef<[u8]> for Salt {
 /// Hashes an input to output a usable key.
 fn kdf(password: &SecretVec<u8>) -> Result<(Secret<Key>, Salt), argon2::Error> {
     let salt = Salt::random();
-    let hasher = Argon2::default();
+    let hasher = get_argon2();
     let mut key = Key::default();
     hasher.hash_password_into(password.expose_secret().as_ref(), salt.as_ref(), &mut key)?;
 
     Ok((Secret::new(key), salt))
+}
+
+/// Returns Argon2id configured as follows:
+///  - 15MiB of memory (`m`),
+///  - an iteration count of 2 (`t`),
+///  - and 2 degrees of parallelism (`p`).
+///
+/// This follows the [minimum recommended parameters suggested by OWASP][rec].
+///
+/// [rec]: https://link.eddie.sh/vaQ6a.
+fn get_argon2() -> Argon2<'static> {
+    let mut params = ParamsBuilder::new();
+    params
+        .m_cost(15 * 1024) // 15 MiB
+        .expect("Hard coded params to work")
+        .t_cost(2)
+        .expect("Hard coded params to work")
+        .p_cost(2)
+        .expect("Hard coded params to work");
+    let params = params.params().expect("Hard coded params to work");
+    Argon2::new(argon2::Algorithm::Argon2id, argon2::Version::V0x13, params)
 }
 
 /// Fetches a cryptographically secure random number generator. This indirection
