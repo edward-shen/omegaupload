@@ -140,7 +140,7 @@ fn handle_download(mut url: ParsedUrl) -> Result<()> {
         password = Some(input);
     }
 
-    open_in_place(&mut data, &url.decryption_key, &password)?;
+    open_in_place(&mut data, &url.decryption_key, password.as_deref())?;
 
     if atty::is(Stream::Stdout) {
         if let Ok(data) = String::from_utf8(data) {
