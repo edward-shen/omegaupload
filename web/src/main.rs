@@ -257,18 +257,16 @@ fn on_success(event: &Event, decrypted: &DecryptedData, expires: &str) {
         )
         .unwrap();
     put_action.set_onsuccess(Some(
-        Closure::wrap(Box::new(|| {
+        Closure::once(Box::new(|| {
             log!("success");
             load_from_db();
-        }) as Box<dyn Fn()>)
+        }))
         .into_js_value()
         .unchecked_ref(),
     ));
     put_action.set_onerror(Some(
-        Closure::wrap(Box::new(|e| {
-            log!(e);
-        }) as Box<dyn Fn(Event)>)
-        .into_js_value()
-        .unchecked_ref(),
+        Closure::once(Box::new(|e: Event| log!(e)))
+            .into_js_value()
+            .unchecked_ref(),
     ));
 }
