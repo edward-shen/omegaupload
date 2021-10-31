@@ -13,6 +13,7 @@ use axum::http::StatusCode;
 use axum::response::Html;
 use axum::{service, AddExtensionLayer, Router};
 use chrono::Utc;
+use futures::stream::StreamExt;
 use headers::HeaderMap;
 use lazy_static::lazy_static;
 use omegaupload_common::{Expiration, API_ENDPOINT};
@@ -20,6 +21,8 @@ use rand::thread_rng;
 use rand::Rng;
 use rocksdb::{ColumnFamilyDescriptor, IteratorMode};
 use rocksdb::{Options, DB};
+use signal_hook::consts::SIGUSR1;
+use signal_hook_tokio::Signals;
 use tokio::task;
 use tower_http::services::ServeDir;
 use tracing::{error, instrument, trace};
@@ -58,6 +61,10 @@ async fn main() -> Result<()> {
 
     set_up_expirations(&db);
 
+    let signals = Signals::new(&[SIGUSR1])?;
+    let signals_handle = signals.handle();
+    let signals_task = tokio::spawn(handle_signals(signals, Arc::clone(&db)));
+
     let root_service = service::get(ServeDir::new("static"))
         .handle_error(|_| Ok::<_, Infallible>(StatusCode::NOT_FOUND));
 
@@ -81,6 +88,9 @@ async fn main() -> Result<()> {
 
     // Must be called for correct shutdown
     DB::destroy(&Options::default(), PASTE_DB_PATH)?;
+
+    signals_handle.close();
+    signals_task.await?;
     Ok(())
 }
 
@@ -147,6 +157,21 @@ fn set_up_expirations(db: &Arc<DB>) {
     info!("Found {} expired pastes.", expired);
     info!("Found {} active pastes.", pending);
     info!("Cleanup timers have been initialized.");
+}
+
+async fn handle_signals(mut signals: Signals, db: Arc<DB>) {
+    while let Some(signal) = signals.next().await {
+        match signal {
+            SIGUSR1 => {
+                let meta_cf = db.cf_handle(META_CF_NAME).unwrap();
+                info!(
+                    "Active paste count: {}",
+                    db.iterator_cf(meta_cf, IteratorMode::Start).count()
+                );
+            }
+            _ => (),
+        }
+    }
 }
 
 #[instrument(skip(db, body), err)]
