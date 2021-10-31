@@ -8,18 +8,21 @@ edition = "2021"
 [dependencies]
 base64 = "0.13"
 bytes = { version = "*", features = ["serde"] }
-chacha20poly1305 = "0.9"
+chacha20poly1305 = { version = "0.9", features = ["stream"] }
 chrono = { version = "0.4", features = ["serde"] }
 headers = "*"
 lazy_static = "1"
 rand = "0.8"
 serde = { version = "1", features = ["derive"] }
-sha2 = "0.9"
 thiserror = "1"
+typenum = "1"
 url = "2"
+argon2 = "0.3.1"
 
-web-sys = { version = "0.3", features = ["Headers"], optional = true }
+# Wasm features
+gloo-console = { version = "0.1", optional = true }
 http = { version = "0.2", optional = true }
+web-sys = { version = "0.3", features = ["Headers"], optional = true }
 
 [features]
-wasm = ["web-sys", "http"]
+wasm = ["gloo-console", "http", "web-sys"]

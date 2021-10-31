@@ -6,9 +6,9 @@ use std::io::{Read, Write};
 use anyhow::{anyhow, bail, Context, Result};
 use atty::Stream;
 use clap::Parser;
-use omegaupload_common::crypto::{gen_key_nonce, open_in_place, seal_in_place, Key};
+use omegaupload_common::crypto::{open_in_place, seal_in_place};
 use omegaupload_common::{
-    base64, hash, Expiration, ParsedUrl, Url, API_ENDPOINT, EXPIRATION_HEADER_NAME,
+    base64, Expiration, ParsedUrl, Url, API_ENDPOINT, EXPIRATION_HEADER_NAME,
 };
 use reqwest::blocking::Client;
 use reqwest::header::EXPIRES;
@@ -65,27 +65,13 @@ fn handle_upload(
         bail!("This tool requires non interactive CLI. Pipe something in!");
     }
 
-    let (data, nonce, key, pw_used) = {
-        let (enc_key, nonce) = gen_key_nonce();
+    let (data, key) = {
         let mut container = Vec::new();
         std::io::stdin().read_to_end(&mut container)?;
-        seal_in_place(&mut container, &nonce, &enc_key)
-            .map_err(|_| anyhow!("Failed to encrypt data"))?;
-
-        let pw_used = if let Some(password) = password {
-            let pw_hash = hash(password.expose_secret().as_bytes());
-            let pw_key = Key::from_slice(pw_hash.as_ref());
-            seal_in_place(&mut container, &nonce.increment(), pw_key)
-                .map_err(|_| anyhow!("Failed to encrypt data"))?;
-            true
-        } else {
-            false
-        };
-
+        let password = password.as_ref().map(|v| v.expose_secret().as_ref());
+        let enc_key = seal_in_place(&mut container, password)?;
         let key = base64::encode(&enc_key);
-        let nonce = base64::encode(&nonce);
-
-        (container, nonce, key, pw_used)
+        (container, key)
     };
 
     let mut res = Client::new().post(url.as_ref());
@@ -104,9 +90,9 @@ fn handle_upload(
         .map_err(|_| anyhow!("Failed to get base URL"))?
         .extend(std::iter::once(res.text()?));
 
-    let mut fragment = format!("key:{}!nonce:{}", key, nonce);
+    let mut fragment = format!("key:{}", key);
 
-    if pw_used {
+    if password.is_some() {
         fragment.push_str("!pw");
     }
 
@@ -141,6 +127,7 @@ fn handle_download(mut url: ParsedUrl) -> Result<()> {
 
     let mut data = res.bytes()?.as_ref().to_vec();
 
+    let mut password = None;
     if url.needs_password {
         // Only print prompt on interactive, else it messes with output
         if atty::is(Stream::Stdout) {
@@ -150,16 +137,10 @@ fn handle_download(mut url: ParsedUrl) -> Result<()> {
         let mut input = String::new();
         std::io::stdin().read_line(&mut input)?;
         input.pop(); // last character is \n, we need to drop it.
-
-        let pw_hash = hash(input.as_bytes());
-        let pw_key = Key::from_slice(pw_hash.as_ref());
-
-        open_in_place(&mut data, &url.nonce.increment(), pw_key)
-            .map_err(|_| anyhow!("Failed to decrypt data. Incorrect password?"))?;
+        password = Some(input);
     }
 
-    open_in_place(&mut data, &url.nonce, &url.decryption_key)
-        .map_err(|_| anyhow!("Failed to decrypt data. Incorrect decryption key?"))?;
+    open_in_place(&mut data, &url.decryption_key, &password)?;
 
     if atty::is(Stream::Stdout) {
         if let Ok(data) = String::from_utf8(data) {

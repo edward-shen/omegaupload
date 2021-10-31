@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use gloo_console::log;
 use js_sys::{Array, Uint8Array};
-use omegaupload_common::crypto::{open_in_place, Key, Nonce};
+use omegaupload_common::crypto::{open_in_place, Key};
 use serde::Serialize;
 use wasm_bindgen::JsCast;
 use web_sys::{Blob, BlobPropertyBag};
@@ -36,31 +36,10 @@ fn now() -> f64 {
 pub fn decrypt(
     mut container: Vec<u8>,
     key: Key,
-    nonce: Nonce,
-    maybe_password: Option<Key>,
+    maybe_password: Option<&str>,
 ) -> Result<DecryptedData, PasteCompleteConstructionError> {
-    log!("Stage 1 decryption started.");
-    let start = now();
-
-    if let Some(password) = maybe_password {
-        crate::render_message("Decrypting Stage 1...".into());
-        open_in_place(&mut container, &nonce.increment(), &password).map_err(|_| {
-            crate::render_message("Unable to decrypt paste with the provided password.".into());
-            PasteCompleteConstructionError::StageOneFailure
-        })?;
-    }
-    log!(format!("Stage 1 completed in {}ms", now() - start));
-
-    log!("Stage 2 decryption started.");
-    let start = now();
-    crate::render_message("Decrypting Stage 2...".into());
-    open_in_place(&mut container, &nonce, &key).map_err(|_| {
-        crate::render_message(
-            "Unable to decrypt paste with the provided encryption key and nonce.".into(),
-        );
-        PasteCompleteConstructionError::StageTwoFailure
-    })?;
-    log!(format!("Stage 2 completed in {}ms", now() - start));
+    open_in_place(&mut container, &key, maybe_password)
+        .map_err(|_| PasteCompleteConstructionError::Decryption)?;
 
     let mime_type = tree_magic_mini::from_u8(&container);
     log!("Mimetype: ", mime_type);
@@ -79,6 +58,7 @@ pub fn decrypt(
         Blob::new_with_u8_array_sequence_and_options(blob_chunks.dyn_ref().unwrap(), &blob_props)
             .unwrap(),
     );
+
     log!(format!("Blob conversion completed in {}ms", now() - start));
 
     if mime_type.starts_with("text/") {
@@ -125,8 +105,7 @@ pub fn decrypt(
 
 #[derive(Debug)]
 pub enum PasteCompleteConstructionError {
-    StageOneFailure,
-    StageTwoFailure,
+    Decryption,
     InvalidEncoding,
 }
 
@@ -135,11 +114,8 @@ impl std::error::Error for PasteCompleteConstructionError {}
 impl Display for PasteCompleteConstructionError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            PasteCompleteConstructionError::StageOneFailure => {
-                write!(f, "Failed to decrypt stage one.")
-            }
-            PasteCompleteConstructionError::StageTwoFailure => {
-                write!(f, "Failed to decrypt stage two.")
+            PasteCompleteConstructionError::Decryption => {
+                write!(f, "Failed to decrypt data.")
             }
             PasteCompleteConstructionError::InvalidEncoding => write!(
                 f,

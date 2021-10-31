@@ -8,9 +8,9 @@ use decrypt::DecryptedData;
 use gloo_console::{error, log};
 use http::uri::PathAndQuery;
 use http::{StatusCode, Uri};
-use js_sys::{JsString, Object, Uint8Array, Array};
-use omegaupload_common::crypto::{Key, Nonce};
-use omegaupload_common::{hash, Expiration, PartialParsedUrl};
+use js_sys::{Array, JsString, Object, Uint8Array};
+use omegaupload_common::crypto::Key;
+use omegaupload_common::{Expiration, PartialParsedUrl};
 use reqwasm::http::Request;
 use wasm_bindgen::prelude::{wasm_bindgen, Closure};
 use wasm_bindgen::{JsCast, JsValue};
@@ -69,7 +69,7 @@ fn main() {
     log!(&url);
     log!(&request_uri.to_string());
     log!(&location().pathname().unwrap());
-    let (key, nonce, needs_pw) = {
+    let (key, needs_pw) = {
         let partial_parsed_url = url
             .split_once('#')
             .map(|(_, fragment)| PartialParsedUrl::from(fragment))
@@ -81,14 +81,7 @@ fn main() {
             render_message("Invalid paste link: Missing decryption key.".into());
             return;
         };
-        let nonce = if let Some(nonce) = partial_parsed_url.nonce {
-            nonce
-        } else {
-            error!("Nonce is missing in url; bailing.");
-            render_message("Invalid paste link: Missing nonce.".into());
-            return;
-        };
-        (key, nonce, partial_parsed_url.needs_password)
+        (key, partial_parsed_url.needs_password)
     };
 
     let password = if needs_pw {
@@ -97,7 +90,7 @@ fn main() {
 
             if let Ok(Some(password)) = pw {
                 if !password.is_empty() {
-                    break Some(hash(password));
+                    break Some(password);
                 }
             }
         }
@@ -108,7 +101,7 @@ fn main() {
     if location().pathname().unwrap() == "/" {
     } else {
         spawn_local(async move {
-            if let Err(e) = fetch_resources(request_uri, key, nonce, password).await {
+            if let Err(e) = fetch_resources(request_uri, key, password.as_deref()).await {
                 log!(e.to_string());
             }
         });
@@ -116,12 +109,7 @@ fn main() {
 }
 
 #[allow(clippy::future_not_send)]
-async fn fetch_resources(
-    request_uri: Uri,
-    key: Key,
-    nonce: Nonce,
-    password: Option<Key>,
-) -> Result<()> {
+async fn fetch_resources(request_uri: Uri, key: Key, password: Option<&str>) -> Result<()> {
     match Request::get(&request_uri.to_string()).send().await {
         Ok(resp) if resp.status() == StatusCode::OK => {
             let expires = Expiration::try_from(resp.headers()).map_or_else(
@@ -154,7 +142,7 @@ async fn fetch_resources(
                 return Ok(());
             }
 
-            let decrypted = decrypt(data, key, nonce, password)?;
+            let decrypted = decrypt(data, key, password)?;
             let db_open_req = open_idb()?;
 
             // On success callback
@@ -197,10 +185,13 @@ async fn fetch_resources(
                         .data(blob)
                         .extra(
                             "entries",
-                            JsValue::from(entries.into_iter()
-                                .filter_map(|x| JsValue::from_serde(x).ok())
-                                .collect::<Array>())
+                            JsValue::from(
+                                entries
+                                    .into_iter()
+                                    .filter_map(|x| JsValue::from_serde(x).ok())
+                                    .collect::<Array>(),
                             ),
+                        ),
                 };
 
                 let put_action = transaction
