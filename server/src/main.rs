@@ -94,6 +94,8 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
+// See https://link.eddie.sh/5JHlD
+#[allow(clippy::cognitive_complexity)]
 fn set_up_expirations(db: &Arc<DB>) {
     let mut corrupted = 0;
     let mut expired = 0;
@@ -161,15 +163,12 @@ fn set_up_expirations(db: &Arc<DB>) {
 
 async fn handle_signals(mut signals: Signals, db: Arc<DB>) {
     while let Some(signal) = signals.next().await {
-        match signal {
-            SIGUSR1 => {
-                let meta_cf = db.cf_handle(META_CF_NAME).unwrap();
-                info!(
-                    "Active paste count: {}",
-                    db.iterator_cf(meta_cf, IteratorMode::Start).count()
-                );
-            }
-            _ => (),
+        if signal == SIGUSR1 {
+            let meta_cf = db.cf_handle(META_CF_NAME).unwrap();
+            info!(
+                "Active paste count: {}",
+                db.iterator_cf(meta_cf, IteratorMode::Start).count()
+            );
         }
     }
 }

@@ -134,13 +134,14 @@ fn handle_download(mut url: ParsedUrl) -> Result<()> {
 
     let mut data = res.bytes()?.as_ref().to_vec();
 
-    let mut password = None;
-    if url.needs_password {
+    let password = if url.needs_password {
         // Only print prompt on interactive, else it messes with output
         let maybe_password =
             prompt_password_stderr("Please enter the password to access this paste: ")?;
-        password = Some(SecretVec::new(maybe_password.into_bytes()));
-    }
+        Some(SecretVec::new(maybe_password.into_bytes()))
+    } else {
+        None
+    };
 
     open_in_place(&mut data, &url.decryption_key, password)?;
 

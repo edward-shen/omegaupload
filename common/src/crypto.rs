@@ -1,4 +1,3 @@
-use std::fmt::Display;
 use std::ops::{Deref, DerefMut};
 
 use argon2::Argon2;
@@ -11,33 +10,16 @@ use rand::{thread_rng, Rng};
 use secrecy::{ExposeSecret, Secret, SecretVec, Zeroize};
 use typenum::Unsigned;
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum Error {
-    ChaCha20Poly1305(chacha20poly1305::aead::Error),
-    Argon2(argon2::Error),
-}
-
-impl From<chacha20poly1305::aead::Error> for Error {
-    fn from(err: chacha20poly1305::aead::Error) -> Self {
-        Error::ChaCha20Poly1305(err)
-    }
-}
-
-impl From<argon2::Error> for Error {
-    fn from(err: argon2::Error) -> Self {
-        Error::Argon2(err)
-    }
-}
-
-impl std::error::Error for Error {}
-
-impl Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Error::ChaCha20Poly1305(_) => write!(f, "Decryption failed"),
-            Error::Argon2(_) => write!(f, "KDF failed"),
-        }
-    }
+    #[error("Invalid password.")]
+    Password,
+    #[error("Invalid secret key.")]
+    SecretKey,
+    #[error("An error occurred while trying to decrypt the blob.")]
+    Encryption,
+    #[error("An error occurred while trying to derive a secret key.")]
+    Kdf,
 }
 
 // This struct intentionally prevents implement Clone or Copy
@@ -72,7 +54,7 @@ impl DerefMut for Key {
 
 impl Zeroize for Key {
     fn zeroize(&mut self) {
-        self.0.zeroize()
+        self.0.zeroize();
     }
 }
 
@@ -92,7 +74,7 @@ impl Zeroize for Key {
 ///
 /// Where:
 ///  - `C(message, key, nonce)` represents encrypting a provided message with
-///     XChaCha20Poly1305.
+///     `XChaCha20Poly1305`.
 ///  - `rng_key` represents a randomly generated key.
 ///  - `kdf(pw, salt)` represents a key derived from Argon2.
 pub fn seal_in_place(
@@ -101,14 +83,18 @@ pub fn seal_in_place(
 ) -> Result<Secret<Key>, Error> {
     let (key, nonce) = gen_key_nonce();
     let cipher = XChaCha20Poly1305::new(key.expose_secret());
-    cipher.encrypt_in_place(&nonce, &[], message)?;
+    cipher
+        .encrypt_in_place(&nonce, &[], message)
+        .map_err(|_| Error::Encryption)?;
 
     let mut maybe_salt_string = None;
     if let Some(password) = pw {
-        let (key, salt_string) = kdf(&password)?;
+        let (key, salt_string) = kdf(&password).map_err(|_| Error::Kdf)?;
         maybe_salt_string = Some(salt_string);
         let cipher = XChaCha20Poly1305::new(key.expose_secret());
-        cipher.encrypt_in_place(&nonce.increment(), &[], message)?;
+        cipher
+            .encrypt_in_place(&nonce.increment(), &[], message)
+            .map_err(|_| Error::Encryption)?;
     }
 
     message.extend_from_slice(nonce.as_slice());
@@ -127,7 +113,9 @@ pub fn open_in_place(
         let salt_buf = data.split_off(data.len() - Salt::SIZE);
         let argon = Argon2::default();
         let mut pw_key = Key::default();
-        argon.hash_password_into(password.expose_secret(), &salt_buf, &mut pw_key)?;
+        argon
+            .hash_password_into(password.expose_secret(), &salt_buf, &mut pw_key)
+            .map_err(|_| Error::Kdf)?;
         Some(Secret::new(pw_key))
     } else {
         None
@@ -139,11 +127,15 @@ pub fn open_in_place(
 
     if let Some(key) = pw_key {
         let cipher = XChaCha20Poly1305::new(key.expose_secret());
-        cipher.decrypt_in_place(&nonce.increment(), &[], data)?;
+        cipher
+            .decrypt_in_place(&nonce.increment(), &[], data)
+            .map_err(|_| Error::Password)?;
     }
 
     let cipher = XChaCha20Poly1305::new(key.expose_secret());
-    cipher.decrypt_in_place(&nonce, &[], data)?;
+    cipher
+        .decrypt_in_place(&nonce, &[], data)
+        .map_err(|_| Error::SecretKey)?;
 
     Ok(())
 }
@@ -208,13 +200,13 @@ impl Nonce {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-struct Salt([u8; Salt::SIZE]);
+struct Salt([u8; Self::SIZE]);
 
 impl Salt {
     const SIZE: usize = argon2::password_hash::Salt::RECOMMENDED_LENGTH;
 
     fn random() -> Self {
-        let mut salt = [0u8; Salt::SIZE];
+        let mut salt = [0_u8; Self::SIZE];
         thread_rng().fill(&mut salt);
         Self(salt)
     }

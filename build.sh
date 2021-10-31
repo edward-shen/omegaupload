@@ -12,9 +12,6 @@ sed -i 's#stylesheet" href="/main#stylesheet" href="/static/main#g' dist/index.h
 # Build server
 cargo build --release --bin omegaupload-server
 
-# index.html no longer needed, served statically by the upload server
-rm dist/index.html
-
 # Prepare assets for upload to webserver
 mkdir -p dist/static
 # Move everything that's not index.html into a `static` subdir

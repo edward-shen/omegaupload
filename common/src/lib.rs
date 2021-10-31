@@ -41,9 +41,7 @@ impl From<&str> for PartialParsedUrl {
         // Base64 has an interesting property that the length of an encoded text
         // is always 4/3rds larger than the original data.
         if !fragment.contains("key") {
-            let decryption_key = base64::decode(fragment)
-                .ok()
-                .and_then(|k| Key::new_secret(k));
+            let decryption_key = base64::decode(fragment).ok().and_then(Key::new_secret);
 
             return Self {
                 decryption_key,
@@ -66,7 +64,7 @@ impl From<&str> for PartialParsedUrl {
         for (key, value) in args {
             match (key, value) {
                 ("key", Some(value)) => {
-                    decryption_key = base64::decode(value).ok().and_then(|k| Key::new_secret(k));
+                    decryption_key = base64::decode(value).ok().and_then(Key::new_secret);
                 }
                 ("pw", _) => {
                     needs_password = true;

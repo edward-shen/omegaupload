@@ -9,7 +9,7 @@ use gloo_console::{error, log};
 use http::uri::PathAndQuery;
 use http::{StatusCode, Uri};
 use js_sys::{Array, JsString, Object, Uint8Array};
-use omegaupload_common::crypto::Key;
+use omegaupload_common::crypto::{Error as CryptoError, Key};
 use omegaupload_common::secrecy::{Secret, SecretVec};
 use omegaupload_common::{Expiration, PartialParsedUrl};
 use reqwasm::http::Request;
@@ -89,10 +89,15 @@ fn main() {
         loop {
             let pw = window().prompt_with_message("A password is required to decrypt this paste:");
 
-            if let Ok(Some(password)) = pw {
-                if !password.is_empty() {
+            match pw {
+                Ok(Some(password)) if password.is_empty() => {
                     break Some(SecretVec::new(password.into_bytes()));
                 }
+                Err(_) => {
+                    render_message("This paste requires a password.".into());
+                    return;
+                }
+                _ => (),
             }
         }
     } else {
@@ -147,7 +152,22 @@ async fn fetch_resources(
                 return Ok(());
             }
 
-            let decrypted = decrypt(data, key, password)?;
+            let decrypted = match decrypt(data, &key, password) {
+                Ok(data) => data,
+                Err(e) => {
+                    let msg = match e {
+                        CryptoError::Password => "The provided password was incorrect.",
+                        CryptoError::SecretKey => "The secret key in the URL was incorrect.",
+                        ref e => {
+                            log!(format!("Bad kdf or corrupted blob: {}", e));
+                            "An internal error occurred."
+                        }
+                    };
+
+                    render_message(JsString::from(msg));
+                    bail!(e);
+                }
+            };
             let db_open_req = open_idb()?;
 
             // On success callback
@@ -192,7 +212,7 @@ async fn fetch_resources(
                             "entries",
                             JsValue::from(
                                 entries
-                                    .into_iter()
+                                    .iter()
                                     .filter_map(|x| JsValue::from_serde(x).ok())
                                     .collect::<Array>(),
                             ),

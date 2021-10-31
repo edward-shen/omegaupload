@@ -1,10 +1,9 @@
-use std::fmt::{Display, Formatter};
 use std::io::Cursor;
 use std::sync::Arc;
 
 use gloo_console::log;
 use js_sys::{Array, Uint8Array};
-use omegaupload_common::crypto::{open_in_place, Key};
+use omegaupload_common::crypto::{open_in_place, Error, Key};
 use omegaupload_common::secrecy::{Secret, SecretVec};
 use serde::Serialize;
 use wasm_bindgen::JsCast;
@@ -36,11 +35,10 @@ fn now() -> f64 {
 
 pub fn decrypt(
     mut container: Vec<u8>,
-    key: Secret<Key>,
+    key: &Secret<Key>,
     maybe_password: Option<SecretVec<u8>>,
-) -> Result<DecryptedData, PasteCompleteConstructionError> {
-    open_in_place(&mut container, &key, maybe_password)
-        .map_err(|_| PasteCompleteConstructionError::Decryption)?;
+) -> Result<DecryptedData, Error> {
+    open_in_place(&mut container, key, maybe_password)?;
 
     let mime_type = tree_magic_mini::from_u8(&container);
     log!("Mimetype: ", mime_type);
@@ -63,15 +61,22 @@ pub fn decrypt(
     log!(format!("Blob conversion completed in {}ms", now() - start));
 
     if mime_type.starts_with("text/") {
-        String::from_utf8(container)
-            .map(Arc::new)
-            .map(DecryptedData::String)
-            .map_err(|_| PasteCompleteConstructionError::InvalidEncoding)
-    } else if mime_type.starts_with("image/") || mime_type == "application/x-riff" {
+        if let Ok(string) = String::from_utf8(container) {
+            Ok(DecryptedData::String(Arc::new(string)))
+        } else {
+            Ok(DecryptedData::Blob(blob))
+        }
+    } else if mime_type.starts_with("image/")
+        // application/x-riff is WebP
+        || mime_type == "application/x-riff"
+    {
         Ok(DecryptedData::Image(blob, container.len()))
     } else if mime_type.starts_with("audio/") {
         Ok(DecryptedData::Audio(blob))
-    } else if mime_type.starts_with("video/") || mime_type == "application/x-matroska" {
+    } else if mime_type.starts_with("video/")
+        // application/x-matroska is mkv
+        || mime_type == "application/x-matroska"
+    {
         Ok(DecryptedData::Video(blob))
     } else if mime_type == "application/zip" {
         let mut entries = vec![];
@@ -101,27 +106,5 @@ pub fn decrypt(
         Ok(DecryptedData::Archive(blob, vec![]))
     } else {
         Ok(DecryptedData::Blob(blob))
-    }
-}
-
-#[derive(Debug)]
-pub enum PasteCompleteConstructionError {
-    Decryption,
-    InvalidEncoding,
-}
-
-impl std::error::Error for PasteCompleteConstructionError {}
-
-impl Display for PasteCompleteConstructionError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            PasteCompleteConstructionError::Decryption => {
-                write!(f, "Failed to decrypt data.")
-            }
-            PasteCompleteConstructionError::InvalidEncoding => write!(
-                f,
-                "Got an file with a text/* mime type, but was unable to parsed as valid UTF-8?"
-            ),
-        }
     }
 }
