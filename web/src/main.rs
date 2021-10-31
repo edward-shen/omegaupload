@@ -177,90 +177,20 @@ async fn fetch_resources(
             };
             let db_open_req = open_idb()?;
 
-            // On success callback
-            let on_success = Closure::once(Box::new(move |event: Event| {
-                let transaction: IdbObjectStore = as_idb_db(&event)
-                    .transaction_with_str_and_mode("decrypted data", IdbTransactionMode::Readwrite)
-                    .unwrap()
-                    .object_store("decrypted data")
-                    .unwrap();
-
-                let decrypted_object = match &decrypted {
-                    DecryptedData::String(s) => IdbObject::new()
-                        .string()
-                        .expiration_text(&expires)
-                        .data(&JsValue::from_str(s)),
-                    DecryptedData::Blob(blob) => {
-                        IdbObject::new().blob().expiration_text(&expires).data(blob)
-                    }
-                    DecryptedData::Image(blob, size) => IdbObject::new()
-                        .image()
-                        .expiration_text(&expires)
-                        .data(blob)
-                        .extra(
-                            "file_size",
-                            Byte::from_bytes(*size as u128)
-                                .get_appropriate_unit(true)
-                                .to_string(),
-                        ),
-                    DecryptedData::Audio(blob) => IdbObject::new()
-                        .audio()
-                        .expiration_text(&expires)
-                        .data(blob),
-                    DecryptedData::Video(blob) => IdbObject::new()
-                        .video()
-                        .expiration_text(&expires)
-                        .data(blob),
-                    DecryptedData::Archive(blob, entries) => IdbObject::new()
-                        .archive()
-                        .expiration_text(&expires)
-                        .data(blob)
-                        .extra(
-                            "entries",
-                            JsValue::from(
-                                entries
-                                    .iter()
-                                    .filter_map(|x| JsValue::from_serde(x).ok())
-                                    .collect::<Array>(),
-                            ),
-                        ),
-                };
-
-                let put_action = transaction
-                    .put_with_key(
-                        &Object::from(decrypted_object),
-                        &JsString::from(location().pathname().unwrap()),
-                    )
-                    .unwrap();
-                put_action.set_onsuccess(Some(
-                    Closure::wrap(Box::new(|| {
-                        log!("success");
-                        load_from_db();
-                    }) as Box<dyn Fn()>)
-                    .into_js_value()
-                    .unchecked_ref(),
-                ));
-                put_action.set_onerror(Some(
-                    Closure::wrap(Box::new(|e| {
-                        log!(e);
-                    }) as Box<dyn Fn(Event)>)
-                    .into_js_value()
-                    .unchecked_ref(),
-                ));
-            }) as Box<dyn FnOnce(Event)>);
+            let on_success = Closure::once(Box::new(move |event| {
+                on_success(&event, &decrypted, &expires);
+            }));
 
             db_open_req.set_onsuccess(Some(on_success.into_js_value().unchecked_ref()));
             db_open_req.set_onerror(Some(
-                Closure::wrap(Box::new(|e| {
-                    log!(e);
-                }) as Box<dyn Fn(Event)>)
-                .into_js_value()
-                .unchecked_ref(),
+                Closure::once(Box::new(|e: Event| log!(e)))
+                    .into_js_value()
+                    .unchecked_ref(),
             ));
-            let on_upgrade = Closure::wrap(Box::new(move |event: Event| {
+            let on_upgrade = Closure::once(Box::new(move |event: Event| {
                 let db = as_idb_db(&event);
                 let _obj_store = db.create_object_store("decrypted data").unwrap();
-            }) as Box<dyn FnMut(Event)>);
+            }));
             db_open_req.set_onupgradeneeded(Some(on_upgrade.into_js_value().unchecked_ref()));
         }
         Ok(resp) if resp.status() == StatusCode::NOT_FOUND => {
@@ -278,4 +208,67 @@ async fn fetch_resources(
     }
 
     Ok(())
+}
+
+fn on_success(event: &Event, decrypted: &DecryptedData, expires: &str) {
+    let transaction: IdbObjectStore = as_idb_db(event)
+        .transaction_with_str_and_mode("decrypted data", IdbTransactionMode::Readwrite)
+        .unwrap()
+        .object_store("decrypted data")
+        .unwrap();
+
+    let decrypted_object = match decrypted {
+        DecryptedData::String(s) => IdbObject::new()
+            .string()
+            .expiration_text(expires)
+            .data(&JsValue::from_str(s)),
+        DecryptedData::Blob(blob) => IdbObject::new().blob().expiration_text(expires).data(blob),
+        DecryptedData::Image(blob, size) => IdbObject::new()
+            .image()
+            .expiration_text(expires)
+            .data(blob)
+            .extra(
+                "file_size",
+                Byte::from_bytes(*size as u128)
+                    .get_appropriate_unit(true)
+                    .to_string(),
+            ),
+        DecryptedData::Audio(blob) => IdbObject::new().audio().expiration_text(expires).data(blob),
+        DecryptedData::Video(blob) => IdbObject::new().video().expiration_text(expires).data(blob),
+        DecryptedData::Archive(blob, entries) => IdbObject::new()
+            .archive()
+            .expiration_text(expires)
+            .data(blob)
+            .extra(
+                "entries",
+                JsValue::from(
+                    entries
+                        .iter()
+                        .filter_map(|x| JsValue::from_serde(x).ok())
+                        .collect::<Array>(),
+                ),
+            ),
+    };
+
+    let put_action = transaction
+        .put_with_key(
+            &Object::from(decrypted_object),
+            &JsString::from(location().pathname().unwrap()),
+        )
+        .unwrap();
+    put_action.set_onsuccess(Some(
+        Closure::wrap(Box::new(|| {
+            log!("success");
+            load_from_db();
+        }) as Box<dyn Fn()>)
+        .into_js_value()
+        .unchecked_ref(),
+    ));
+    put_action.set_onerror(Some(
+        Closure::wrap(Box::new(|e| {
+            log!(e);
+        }) as Box<dyn Fn(Event)>)
+        .into_js_value()
+        .unchecked_ref(),
+    ));
 }
