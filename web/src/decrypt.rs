@@ -12,7 +12,7 @@ use web_sys::{Blob, BlobPropertyBag};
 #[derive(Clone, Serialize)]
 pub struct ArchiveMeta {
     name: String,
-    file_size: usize,
+    file_size: u64,
 }
 
 #[derive(Clone)]
@@ -86,7 +86,7 @@ pub fn decrypt(
                 match zip.by_index(i) {
                     Ok(file) => entries.push(ArchiveMeta {
                         name: file.name().to_string(),
-                        file_size: file.size() as usize,
+                        file_size: file.size(),
                     }),
                     Err(err) => match err {
                         zip::result::ZipError::UnsupportedArchive(s) => {

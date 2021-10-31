@@ -1,6 +1,7 @@
 use std::fmt::Debug;
 
 use rand::prelude::Distribution;
+use rand::Rng;
 use serde::de::{Unexpected, Visitor};
 use serde::Deserialize;
 
@@ -109,7 +110,7 @@ pub struct Generator;
 const ALPHABET: &[u8; 32] = b"23456789CFGHJMPQRVWXcfghjmpqrvwx";
 
 impl Distribution<ShortCodeChar> for Generator {
-    fn sample<R: rand::Rng + ?Sized>(&self, rng: &mut R) -> ShortCodeChar {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> ShortCodeChar {
         let value = rng.gen_range(0..32);
         assert!(value < 32);
         ShortCodeChar(ALPHABET[value] as char)
@@ -117,7 +118,7 @@ impl Distribution<ShortCodeChar> for Generator {
 }
 
 impl<const N: usize> Distribution<ShortCode<N>> for Generator {
-    fn sample<R: rand::Rng + ?Sized>(&self, rng: &mut R) -> ShortCode<N> {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> ShortCode<N> {
         let mut arr = [ShortCodeChar('\0'); N];
 
         for c in arr.iter_mut() {

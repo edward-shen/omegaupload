@@ -17,7 +17,7 @@ cargo build --release --bin omegaupload-server
 # Prepare assets for upload to webserver
 mkdir -p dist/static
 # Move everything that's not index.html into a `static` subdir
-find dist -type f -exec mv {} dist/static/ ";"
+find dist -not -name index.html -type f -exec mv {} dist/static/ ";"
 
 strip target/release/omegaupload-server
 cp target/release/omegaupload-server dist/omegaupload-server

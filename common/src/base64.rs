@@ -6,6 +6,11 @@ pub fn encode(input: impl AsRef<[u8]>) -> String {
 }
 
 /// URL-safe Base64 decoding.
+///
+/// # Errors
+///
+/// Returns an error if a buffer cannot be decoded, such as if there's an
+/// incorrect number of bytes.
 pub fn decode(input: impl AsRef<[u8]>) -> Result<Vec<u8>, DecodeError> {
     base64::decode_config(input, URL_SAFE)
 }

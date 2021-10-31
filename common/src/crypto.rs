@@ -6,7 +6,7 @@ use chacha20poly1305::aead::generic_array::GenericArray;
 use chacha20poly1305::aead::{AeadInPlace, NewAead};
 use chacha20poly1305::XChaCha20Poly1305;
 use chacha20poly1305::XNonce;
-use rand::{thread_rng, Rng};
+use rand::{CryptoRng, Rng};
 use secrecy::{ExposeSecret, Secret, SecretVec, Zeroize};
 use typenum::Unsigned;
 
@@ -27,6 +27,7 @@ pub enum Error {
 pub struct Key(chacha20poly1305::Key);
 
 impl Key {
+    /// Encloses a secret key in a secret `Key` struct.
     pub fn new_secret(vec: Vec<u8>) -> Option<Secret<Self>> {
         chacha20poly1305::Key::from_exact_iter(vec.into_iter())
             .map(Self)
@@ -58,11 +59,14 @@ impl Zeroize for Key {
     }
 }
 
-/// Seals the provided message with an optional message. The resulting sealed
-/// message has the nonce used to encrypt the message appended to it as well as
-/// a salt string used to derive the key. In other words, the modified buffer is
-/// one of the following to possibilities, depending if there was a password
-/// provided:
+/// Seals the provided message with an optional password, returning the secret
+/// key used to encrypt the message and mutating the buffer to contain necessary
+/// metadata.
+///
+/// The resulting sealed message has the nonce used to encrypt the message
+/// appended to it as well as a salt string used to derive the key. In other
+/// words, the modified buffer is one of the following to possibilities,
+/// depending if there was a password provided:
 ///
 /// ```
 /// modified = C(message, rng_key, nonce) || nonce
@@ -77,6 +81,17 @@ impl Zeroize for Key {
 ///     `XChaCha20Poly1305`.
 ///  - `rng_key` represents a randomly generated key.
 ///  - `kdf(pw, salt)` represents a key derived from Argon2.
+///  - `nonce` represents a randomly generated nonce.
+///
+/// Note that the lengths for the nonce, key, and salt follow recommended
+/// values. As of writing this doc (2021-10-31), the nonce size is 24 bytes, the
+/// salt size is 16 bytes, and the key size is 32 bytes.
+///
+/// # Errors
+///
+/// This message will return an error if and only if there was a problem
+/// encrypting the message or deriving a secret key from the password, if one
+/// was provided.
 pub fn seal_in_place(
     message: &mut Vec<u8>,
     pw: Option<SecretVec<u8>>,
@@ -104,6 +119,12 @@ pub fn seal_in_place(
     Ok(key)
 }
 
+/// Opens a message that has been sealed with `seal_in_place`.
+///
+/// # Errors
+///
+/// Returns an error if there was a decryption failure or if there was a problem
+/// deriving a secret key from the password.
 pub fn open_in_place(
     data: &mut Vec<u8>,
     key: &Secret<Key>,
@@ -140,10 +161,9 @@ pub fn open_in_place(
     Ok(())
 }
 
-/// Securely generates a random key and nonce.
 #[must_use]
 fn gen_key_nonce() -> (Secret<Key>, Nonce) {
-    let mut rng = thread_rng();
+    let mut rng = get_csrng();
     let mut key = GenericArray::default();
     rng.fill(key.as_mut_slice());
     let mut nonce = Nonce::default();
@@ -154,14 +174,8 @@ fn gen_key_nonce() -> (Secret<Key>, Nonce) {
 // Type alias; to ensure that we're consistent on what the inner impl is.
 type NonceImpl = XNonce;
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 struct Nonce(NonceImpl);
-
-impl Default for Nonce {
-    fn default() -> Self {
-        Self(GenericArray::default())
-    }
-}
 
 impl Deref for Nonce {
     type Target = NonceImpl;
@@ -207,7 +221,7 @@ impl Salt {
 
     fn random() -> Self {
         let mut salt = [0_u8; Self::SIZE];
-        thread_rng().fill(&mut salt);
+        get_csrng().fill(&mut salt);
         Self(salt)
     }
 }
@@ -226,4 +240,13 @@ fn kdf(password: &SecretVec<u8>) -> Result<(Secret<Key>, Salt), argon2::Error> {
     hasher.hash_password_into(password.expose_secret().as_ref(), salt.as_ref(), &mut key)?;
 
     Ok((Secret::new(key), salt))
+}
+
+/// Fetches a cryptographically secure random number generator. This indirection
+/// is used for better auditing the quality of rng. Notably, this function
+/// returns a `Rng` with the `CryptoRng` marker trait, preventing
+/// non-cryptographically secure RNGs from being used.
+#[must_use]
+pub fn get_csrng() -> impl CryptoRng + Rng {
+    rand::thread_rng()
 }

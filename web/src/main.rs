@@ -96,6 +96,8 @@ fn main() {
                 Ok(Some(password)) if !password.is_empty() => {
                     break Some(SecretVec::new(password.into_bytes()));
                 }
+                // Empty message was entered.
+                Ok(Some(_)) => (),
                 // Cancel button was entered.
                 Ok(None) => {
                     render_message("This paste requires a password.".into());
@@ -111,8 +113,6 @@ fn main() {
     } else {
         None
     };
-
-    log!(location().pathname().unwrap());
 
     spawn_local(async move {
         if let Err(e) = fetch_resources(request_uri, key, password).await {

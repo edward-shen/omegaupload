@@ -18,7 +18,8 @@ futures = "0.3"
 # We just need to pull in whatever axum is pulling in
 headers = "*"
 lazy_static = "1"
-rand = "0.8"
+# Disable `random()` and `thread_rng()`
+rand = { version = "0.8", default_features = false }
 rocksdb = { version = "0.17", default_features = false, features = ["zstd"] }
 serde = { version = "1", features = ["derive"] }
 signal-hook = "0.3"

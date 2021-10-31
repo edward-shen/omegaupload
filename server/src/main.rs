@@ -16,8 +16,8 @@ use chrono::Utc;
 use futures::stream::StreamExt;
 use headers::HeaderMap;
 use lazy_static::lazy_static;
+use omegaupload_common::crypto::get_csrng;
 use omegaupload_common::{Expiration, API_ENDPOINT};
-use rand::thread_rng;
 use rand::Rng;
 use rocksdb::{ColumnFamilyDescriptor, IteratorMode};
 use rocksdb::{Options, DB};
@@ -41,6 +41,7 @@ lazy_static! {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    const INDEX_PAGE: Html<&'static str> = Html(include_str!("../../dist/index.html"));
     const PASTE_DB_PATH: &str = "database";
     const SHORT_CODE_SIZE: usize = 12;
 
@@ -67,8 +68,6 @@ async fn main() -> Result<()> {
 
     let root_service = service::get(ServeDir::new("static"))
         .handle_error(|_| Ok::<_, Infallible>(StatusCode::NOT_FOUND));
-
-    const INDEX_PAGE: Html<&'static str> = Html(include_str!("../../dist/index.html"));
 
     axum::Server::bind(&"0.0.0.0:8080".parse()?)
         .serve(
@@ -206,7 +205,7 @@ async fn upload<const N: usize>(
     // Try finding a code; give up after 1000 attempts
     // Statistics show that this is very unlikely to happen
     for i in 0..1000 {
-        let code: ShortCode<N> = thread_rng().sample(short_code::Generator);
+        let code: ShortCode<N> = get_csrng().sample(short_code::Generator);
         let db = Arc::clone(&db);
         let key = code.as_bytes();
         let query = task::spawn_blocking(move || {
