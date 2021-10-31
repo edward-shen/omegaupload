@@ -68,14 +68,16 @@ async fn main() -> Result<()> {
     let root_service = service::get(ServeDir::new("static"))
         .handle_error(|_| Ok::<_, Infallible>(StatusCode::NOT_FOUND));
 
+    const INDEX_PAGE: Html<&'static str> = Html(include_str!("../../dist/index.html"));
+
     axum::Server::bind(&"0.0.0.0:8080".parse()?)
         .serve(
             Router::new()
-                .route("/", post(upload::<SHORT_CODE_SIZE>))
                 .route(
-                    "/:code",
-                    get(|| async { Html(include_str!("../../dist/index.html")) }),
+                    "/",
+                    post(upload::<SHORT_CODE_SIZE>).get(|| async { INDEX_PAGE }),
                 )
+                .route("/:code", get(|| async { INDEX_PAGE }))
                 .nest("/static", root_service)
                 .route(
                     &format!("{}{}", API_ENDPOINT.to_string(), "/:code"),

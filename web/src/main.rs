@@ -56,6 +56,11 @@ fn open_idb() -> Result<IdbOpenDbRequest> {
 fn main() {
     std::panic::set_hook(Box::new(console_error_panic_hook::hook));
 
+    if location().pathname().unwrap() == "/" {
+        render_message("Go away".into());
+        return;
+    }
+
     render_message("Loading paste...".into());
 
     let url = String::from(location().to_string());
@@ -67,9 +72,6 @@ fn main() {
         Uri::from_parts(uri_parts).unwrap()
     };
 
-    log!(&url);
-    log!(&request_uri.to_string());
-    log!(&location().pathname().unwrap());
     let (key, needs_pw) = {
         let partial_parsed_url = url
             .split_once('#')
@@ -104,14 +106,13 @@ fn main() {
         None
     };
 
-    if location().pathname().unwrap() == "/" {
-    } else {
-        spawn_local(async move {
-            if let Err(e) = fetch_resources(request_uri, key, password).await {
-                log!(e.to_string());
-            }
-        });
-    }
+    log!(location().pathname().unwrap());
+
+    spawn_local(async move {
+        if let Err(e) = fetch_resources(request_uri, key, password).await {
+            log!(e.to_string());
+        }
+    });
 }
 
 #[allow(clippy::future_not_send)]
