@@ -5,6 +5,7 @@ use std::sync::Arc;
 use gloo_console::log;
 use js_sys::{Array, Uint8Array};
 use omegaupload_common::crypto::{open_in_place, Key};
+use omegaupload_common::secrecy::{Secret, SecretVec};
 use serde::Serialize;
 use wasm_bindgen::JsCast;
 use web_sys::{Blob, BlobPropertyBag};
@@ -35,8 +36,8 @@ fn now() -> f64 {
 
 pub fn decrypt(
     mut container: Vec<u8>,
-    key: Key,
-    maybe_password: Option<&str>,
+    key: Secret<Key>,
+    maybe_password: Option<SecretVec<u8>>,
 ) -> Result<DecryptedData, PasteCompleteConstructionError> {
     open_in_place(&mut container, &key, maybe_password)
         .map_err(|_| PasteCompleteConstructionError::Decryption)?;

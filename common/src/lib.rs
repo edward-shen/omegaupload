@@ -9,6 +9,8 @@ use bytes::Bytes;
 use chrono::{DateTime, Duration, Utc};
 use headers::{Header, HeaderName, HeaderValue};
 use lazy_static::lazy_static;
+pub use secrecy;
+use secrecy::Secret;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 pub use url::Url;
@@ -22,18 +24,33 @@ pub const API_ENDPOINT: &str = "/api";
 
 pub struct ParsedUrl {
     pub sanitized_url: Url,
-    pub decryption_key: Key,
+    pub decryption_key: Secret<Key>,
     pub needs_password: bool,
 }
 
 #[derive(Default)]
 pub struct PartialParsedUrl {
-    pub decryption_key: Option<Key>,
+    pub decryption_key: Option<Secret<Key>>,
     pub needs_password: bool,
 }
 
 impl From<&str> for PartialParsedUrl {
     fn from(fragment: &str) -> Self {
+        // Short circuit if the fragment only contains the key.
+
+        // Base64 has an interesting property that the length of an encoded text
+        // is always 4/3rds larger than the original data.
+        if !fragment.contains("key") {
+            let decryption_key = base64::decode(fragment)
+                .ok()
+                .and_then(|k| Key::new_secret(k));
+
+            return Self {
+                decryption_key,
+                needs_password: false,
+            };
+        }
+
         let args = fragment.split('!').filter_map(|kv| {
             let (k, v) = {
                 let mut iter = kv.split(':');
@@ -49,7 +66,7 @@ impl From<&str> for PartialParsedUrl {
         for (key, value) in args {
             match (key, value) {
                 ("key", Some(value)) => {
-                    decryption_key = base64::decode(value).map(|k| *Key::from_slice(&k)).ok();
+                    decryption_key = base64::decode(value).ok().and_then(|k| Key::new_secret(k));
                 }
                 ("pw", _) => {
                     needs_password = true;
@@ -71,10 +88,6 @@ pub enum ParseUrlError {
     BadUrl,
     #[error("Missing decryption key")]
     NeedKey,
-    #[error("Missing nonce")]
-    NeedNonce,
-    #[error("Missing decryption key and nonce")]
-    NeedKeyAndNonce,
 }
 
 impl FromStr for ParsedUrl {
@@ -82,22 +95,19 @@ impl FromStr for ParsedUrl {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut url = Url::from_str(s).map_err(|_| ParseUrlError::BadUrl)?;
-        let fragment = url.fragment().ok_or(ParseUrlError::NeedKeyAndNonce)?;
+        let fragment = url.fragment().ok_or(ParseUrlError::NeedKey)?;
         if fragment.is_empty() {
-            return Err(ParseUrlError::NeedKeyAndNonce);
+            return Err(ParseUrlError::NeedKey);
         }
 
         let PartialParsedUrl {
-            decryption_key,
+            mut decryption_key,
             needs_password,
         } = PartialParsedUrl::from(fragment);
 
         url.set_fragment(None);
 
-        let decryption_key = match &decryption_key {
-            Some(k) => Ok(*k),
-            None => Err(ParseUrlError::NeedKey),
-        }?;
+        let decryption_key = decryption_key.take().ok_or(ParseUrlError::NeedKey)?;
 
         Ok(Self {
             sanitized_url: url,

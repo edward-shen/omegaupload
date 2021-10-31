@@ -10,6 +10,7 @@ use http::uri::PathAndQuery;
 use http::{StatusCode, Uri};
 use js_sys::{Array, JsString, Object, Uint8Array};
 use omegaupload_common::crypto::Key;
+use omegaupload_common::secrecy::{Secret, SecretVec};
 use omegaupload_common::{Expiration, PartialParsedUrl};
 use reqwasm::http::Request;
 use wasm_bindgen::prelude::{wasm_bindgen, Closure};
@@ -90,7 +91,7 @@ fn main() {
 
             if let Ok(Some(password)) = pw {
                 if !password.is_empty() {
-                    break Some(password);
+                    break Some(SecretVec::new(password.into_bytes()));
                 }
             }
         }
@@ -101,7 +102,7 @@ fn main() {
     if location().pathname().unwrap() == "/" {
     } else {
         spawn_local(async move {
-            if let Err(e) = fetch_resources(request_uri, key, password.as_deref()).await {
+            if let Err(e) = fetch_resources(request_uri, key, password).await {
                 log!(e.to_string());
             }
         });
@@ -109,7 +110,11 @@ fn main() {
 }
 
 #[allow(clippy::future_not_send)]
-async fn fetch_resources(request_uri: Uri, key: Key, password: Option<&str>) -> Result<()> {
+async fn fetch_resources(
+    request_uri: Uri,
+    key: Secret<Key>,
+    password: Option<SecretVec<u8>>,
+) -> Result<()> {
     match Request::get(&request_uri.to_string()).send().await {
         Ok(resp) if resp.status() == StatusCode::OK => {
             let expires = Expiration::try_from(resp.headers()).map_or_else(

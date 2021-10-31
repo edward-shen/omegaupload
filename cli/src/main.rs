@@ -2,18 +2,19 @@
 #![deny(unsafe_code)]
 
 use std::io::{Read, Write};
+use std::path::PathBuf;
 
 use anyhow::{anyhow, bail, Context, Result};
 use atty::Stream;
 use clap::Parser;
 use omegaupload_common::crypto::{open_in_place, seal_in_place};
+use omegaupload_common::secrecy::{ExposeSecret, SecretVec};
 use omegaupload_common::{
     base64, Expiration, ParsedUrl, Url, API_ENDPOINT, EXPIRATION_HEADER_NAME,
 };
 use reqwest::blocking::Client;
 use reqwest::header::EXPIRES;
 use reqwest::StatusCode;
-use secrecy::{ExposeSecret, SecretString};
 
 #[derive(Parser)]
 struct Opts {
@@ -29,9 +30,10 @@ enum Action {
         /// Encrypt the uploaded paste with the provided password, preventing
         /// public access.
         #[clap(short, long)]
-        password: Option<SecretString>,
+        password: bool,
         #[clap(short, long)]
         duration: Option<Expiration>,
+        path: PathBuf,
     },
     Download {
         /// The paste to download.
@@ -47,7 +49,8 @@ fn main() -> Result<()> {
             url,
             password,
             duration,
-        } => handle_upload(url, password, duration),
+            path,
+        } => handle_upload(url, password, duration, path),
         Action::Download { url } => handle_download(url),
     }?;
 
@@ -56,8 +59,9 @@ fn main() -> Result<()> {
 
 fn handle_upload(
     mut url: Url,
-    password: Option<SecretString>,
+    password: bool,
     duration: Option<Expiration>,
+    path: PathBuf,
 ) -> Result<()> {
     url.set_fragment(None);
 
@@ -66,11 +70,17 @@ fn handle_upload(
     }
 
     let (data, key) = {
-        let mut container = Vec::new();
-        std::io::stdin().read_to_end(&mut container)?;
-        let password = password.as_ref().map(|v| v.expose_secret().as_ref());
+        let mut container = std::fs::read(path)?;
+        let password = if password {
+            let mut buffer = vec![];
+            std::io::stdin().read_to_end(&mut buffer)?;
+            Some(SecretVec::new(buffer))
+        } else {
+            None
+        };
+
         let enc_key = seal_in_place(&mut container, password)?;
-        let key = base64::encode(&enc_key);
+        let key = base64::encode(&enc_key.expose_secret().as_ref());
         (container, key)
     };
 
@@ -90,11 +100,11 @@ fn handle_upload(
         .map_err(|_| anyhow!("Failed to get base URL"))?
         .extend(std::iter::once(res.text()?));
 
-    let mut fragment = format!("key:{}", key);
-
-    if password.is_some() {
-        fragment.push_str("!pw");
-    }
+    let fragment = if password {
+        format!("key:{}!pw", key)
+    } else {
+        key
+    };
 
     url.set_fragment(Some(&fragment));
 
@@ -140,7 +150,11 @@ fn handle_download(mut url: ParsedUrl) -> Result<()> {
         password = Some(input);
     }
 
-    open_in_place(&mut data, &url.decryption_key, password.as_deref())?;
+    open_in_place(
+        &mut data,
+        &url.decryption_key,
+        password.map(|v| SecretVec::new(v.into_bytes())),
+    )?;
 
     if atty::is(Stream::Stdout) {
         if let Ok(data) = String::from_utf8(data) {
