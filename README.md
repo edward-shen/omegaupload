@@ -12,7 +12,7 @@ https://paste.example.com/PgRG8Hfrr9rR#I1FG2oejo2gSjB3Ym1mEmRfcN4X8GXc2pZtZeiSsW
 # Uploading a file with a password:
 $ omegaupload upload -p https://paste.example.com path/to/file
 Please set the password for this paste:
-https://paste.crabravers.club/862vhXVp3v9R#key:tbGxzHBNnXjS2eq89X9uvZKz_i8bvapLPEp8g0waQrc=!pw
+https://paste.example.com/862vhXVp3v9R#key:tbGxzHBNnXjS2eq89X9uvZKz_i8bvapLPEp8g0waQrc=!pw
 
 # Downloading a file:
 $ omegaupload download https://paste.example.com/PgRG8Hfrr9rR#I1FG2oejo2gSjB3Ym1mEmRfcN4X8GXc2pZtZeiSsWFo=
