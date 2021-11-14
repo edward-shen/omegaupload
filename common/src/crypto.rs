@@ -67,6 +67,7 @@ impl Deref for Key {
         &self.0
     }
 }
+
 impl DerefMut for Key {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
