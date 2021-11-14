@@ -22,12 +22,13 @@ use std::time::Duration;
 
 use anyhow::Result;
 use axum::body::Bytes;
+use axum::error_handling::HandleErrorExt;
 use axum::extract::{Extension, Path, TypedHeader};
-use axum::handler::{get, post};
 use axum::http::header::EXPIRES;
 use axum::http::StatusCode;
 use axum::response::Html;
-use axum::{service, AddExtensionLayer, Router};
+use axum::routing::{get, post, service_method_routing};
+use axum::{AddExtensionLayer, Router};
 use chrono::Utc;
 use futures::stream::StreamExt;
 use headers::HeaderMap;
@@ -82,11 +83,12 @@ async fn main() -> Result<()> {
     let signals_handle = signals.handle();
     let signals_task = tokio::spawn(handle_signals(signals, Arc::clone(&db)));
 
-    let root_service = service::get(ServeDir::new("static"))
+    let root_service = service_method_routing::get(ServeDir::new("static"))
         .handle_error(|_| Ok::<_, Infallible>(StatusCode::NOT_FOUND));
 
     axum::Server::bind(&"0.0.0.0:8080".parse()?)
-        .serve(
+        .serve({
+            info!("Now serving on 0.0.0.0:8080");
             Router::new()
                 .route(
                     "/",
@@ -99,8 +101,8 @@ async fn main() -> Result<()> {
                     get(paste::<SHORT_CODE_SIZE>).delete(delete::<SHORT_CODE_SIZE>),
                 )
                 .layer(AddExtensionLayer::new(db))
-                .into_make_service(),
-        )
+                .into_make_service()
+        })
         .await?;
 
     // Must be called for correct shutdown
