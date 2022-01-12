@@ -22,7 +22,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use std::convert::Infallible;
 use std::fmt::Display;
 use std::str::FromStr;
 
@@ -71,19 +70,29 @@ impl PartialEq for PartialParsedUrl {
     }
 }
 
-impl From<&str> for PartialParsedUrl {
-    fn from(fragment: &str) -> Self {
+#[derive(Error, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum PartialParsedUrlParseError {
+    #[error("A decryption key that was not valid web base64 was provided.")]
+    InvalidDecryptionKey,
+}
+
+impl TryFrom<&str> for PartialParsedUrl {
+    type Error = PartialParsedUrlParseError;
+
+    fn try_from(fragment: &str) -> Result<Self, Self::Error> {
         // Short circuit if the fragment only contains the key.
 
         // Base64 has an interesting property that the length of an encoded text
         // is always 4/3rds larger than the original data.
-        if !fragment.contains("key") {
-            let decryption_key = base64::decode(fragment).ok().and_then(Key::new_secret);
+        if !fragment.contains("key:") {
+            let decryption_key = base64::decode(fragment)
+                .map_err(|_| PartialParsedUrlParseError::InvalidDecryptionKey)?;
+            let decryption_key = Key::new_secret(decryption_key);
 
-            return Self {
+            return Ok(Self {
                 decryption_key,
                 needs_password: false,
-            };
+            });
         }
 
         let args = fragment.split('!').filter_map(|kv| {
@@ -101,7 +110,9 @@ impl From<&str> for PartialParsedUrl {
         for (key, value) in args {
             match (key, value) {
                 ("key", Some(value)) => {
-                    decryption_key = base64::decode(value).ok().and_then(Key::new_secret);
+                    let key = base64::decode(value)
+                        .map_err(|_| PartialParsedUrlParseError::InvalidDecryptionKey)?;
+                    decryption_key = Key::new_secret(key);
                 }
                 ("pw", _) => {
                     needs_password = true;
@@ -110,18 +121,18 @@ impl From<&str> for PartialParsedUrl {
             }
         }
 
-        Self {
+        Ok(Self {
             decryption_key,
             needs_password,
-        }
+        })
     }
 }
 
 impl FromStr for PartialParsedUrl {
-    type Err = Infallible;
+    type Err = PartialParsedUrlParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self::from(s))
+        Self::try_from(s)
     }
 }
 
@@ -146,7 +157,7 @@ impl FromStr for ParsedUrl {
         let PartialParsedUrl {
             mut decryption_key,
             needs_password,
-        } = PartialParsedUrl::from(fragment);
+        } = PartialParsedUrl::try_from(fragment).unwrap_or_default();
 
         url.set_fragment(None);
 
@@ -379,12 +390,12 @@ mod partial_parsed_url_parsing {
     }
 
     #[test]
-    fn invalid_decryption_key_gracefully_fails() {
-        assert_eq!("invalid key".parse(), Ok(PartialParsedUrl::default()));
+    fn invalid_decryption_key_fails() {
+        assert!("invalid key".parse::<PartialParsedUrl>().is_err());
     }
 
     #[test]
-    fn unknown_fields_are_ignored() {
-        assert_eq!("!!a!!b!!c".parse(), Ok(PartialParsedUrl::default()));
+    fn unknown_fields_fail() {
+        assert!("!!a!!b!!c".parse::<PartialParsedUrl>().is_err());
     }
 }

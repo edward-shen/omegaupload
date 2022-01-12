@@ -91,7 +91,7 @@ fn main() {
     let (key, needs_pw) = {
         let partial_parsed_url = url
             .split_once('#')
-            .map(|(_, fragment)| PartialParsedUrl::from(fragment))
+            .and_then(|(_, fragment)| PartialParsedUrl::try_from(fragment).ok())
             .unwrap_or_default();
         let key = if let Some(key) = partial_parsed_url.decryption_key {
             key
