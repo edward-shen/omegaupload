@@ -89,11 +89,11 @@ impl Zeroize for Key {
 /// words, the modified buffer is one of the following to possibilities,
 /// depending if there was a password provided:
 ///
-/// ```
+/// ```text
 /// modified = C(message, rng_key, nonce) || nonce
 /// ```
 /// or
-/// ```
+/// ```text
 /// modified = C(C(message, rng_key, nonce), kdf(pw, salt), nonce + 1) || nonce || salt
 /// ```
 ///
