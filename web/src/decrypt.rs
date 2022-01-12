@@ -49,11 +49,13 @@ fn now() -> f64 {
         .now()
 }
 
+pub struct MimeType(pub String);
+
 pub fn decrypt(
     mut container: Vec<u8>,
     key: &Secret<Key>,
     maybe_password: Option<SecretVec<u8>>,
-) -> Result<DecryptedData, Error> {
+) -> Result<(DecryptedData, MimeType), Error> {
     open_in_place(&mut container, key, maybe_password)?;
 
     let mime_type = tree_magic_mini::from_u8(&container);
@@ -76,14 +78,14 @@ pub fn decrypt(
 
     log!(format!("Blob conversion completed in {}ms", now() - start));
 
-    match container.content_type() {
-        ContentType::Text => Ok(DecryptedData::String(Arc::new(
+    let data = match container.content_type() {
+        ContentType::Text => DecryptedData::String(Arc::new(
             // SAFETY: ContentType::Text is guaranteed to be valid UTF-8.
             unsafe { String::from_utf8_unchecked(container) },
-        ))),
-        ContentType::Image => Ok(DecryptedData::Image(blob, container.len())),
-        ContentType::Audio => Ok(DecryptedData::Audio(blob)),
-        ContentType::Video => Ok(DecryptedData::Video(blob)),
+        )),
+        ContentType::Image => DecryptedData::Image(blob, container.len()),
+        ContentType::Audio => DecryptedData::Audio(blob),
+        ContentType::Video => DecryptedData::Video(blob),
         ContentType::ZipArchive => {
             let mut entries = vec![];
             let cursor = Cursor::new(container);
@@ -107,11 +109,13 @@ pub fn decrypt(
             }
 
             entries.sort_by(|a, b| a.name.cmp(&b.name));
-            Ok(DecryptedData::Archive(blob, entries))
+            DecryptedData::Archive(blob, entries)
         }
-        ContentType::GzipArchive => Ok(DecryptedData::Archive(blob, vec![])),
-        ContentType::Unknown => Ok(DecryptedData::Blob(blob)),
-    }
+        ContentType::GzipArchive => DecryptedData::Archive(blob, vec![]),
+        ContentType::Unknown => DecryptedData::Blob(blob),
+    };
+
+    Ok((data, MimeType(mime_type.to_owned())))
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]

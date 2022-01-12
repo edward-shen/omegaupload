@@ -20,7 +20,7 @@ use std::str::FromStr;
 
 use anyhow::{anyhow, bail, Context, Result};
 use byte_unit::{n_mib_bytes, Byte};
-use decrypt::DecryptedData;
+use decrypt::{DecryptedData, MimeType};
 use gloo_console::{error, log};
 use http::uri::PathAndQuery;
 use http::{StatusCode, Uri};
@@ -47,7 +47,7 @@ const DOWNLOAD_SIZE_LIMIT: u128 = n_mib_bytes!(500);
 #[wasm_bindgen]
 extern "C" {
     #[wasm_bindgen(js_name = loadFromDb)]
-    pub fn load_from_db();
+    pub fn load_from_db(mimetype: JsString);
     #[wasm_bindgen(js_name = renderMessage)]
     pub fn render_message(message: JsString);
 }
@@ -175,7 +175,7 @@ async fn fetch_resources(
                 return Ok(());
             }
 
-            let decrypted = match decrypt(data, &key, password) {
+            let (decrypted, mimetype) = match decrypt(data, &key, password) {
                 Ok(data) => data,
                 Err(e) => {
                     let msg = match e {
@@ -194,7 +194,7 @@ async fn fetch_resources(
             let db_open_req = open_idb()?;
 
             let on_success = Closure::once(Box::new(move |event| {
-                on_success(&event, &decrypted, &expires);
+                on_success(&event, &decrypted, mimetype, &expires);
             }));
 
             db_open_req.set_onsuccess(Some(on_success.into_js_value().unchecked_ref()));
@@ -226,7 +226,7 @@ async fn fetch_resources(
     Ok(())
 }
 
-fn on_success(event: &Event, decrypted: &DecryptedData, expires: &str) {
+fn on_success(event: &Event, decrypted: &DecryptedData, mimetype: MimeType, expires: &str) {
     let transaction: IdbObjectStore = as_idb_db(event)
         .transaction_with_str_and_mode("decrypted data", IdbTransactionMode::Readwrite)
         .unwrap()
@@ -275,7 +275,7 @@ fn on_success(event: &Event, decrypted: &DecryptedData, expires: &str) {
     put_action.set_onsuccess(Some(
         Closure::once(Box::new(|| {
             log!("success");
-            load_from_db();
+            load_from_db(JsString::from(mimetype.0));
         }))
         .into_js_value()
         .unchecked_ref(),

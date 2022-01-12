@@ -15,7 +15,8 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 // Exported to main.rs
-function loadFromDb() {
+function loadFromDb(mimetype: string) {
+  console.log("Got mime type:", mimetype);
   const dbReq = window.indexedDB.open("omegaupload", 1);
   dbReq.onsuccess = (evt) => {
     const db = (evt.target as IDBRequest).result;
@@ -27,7 +28,7 @@ function loadFromDb() {
       const data = (evt.target as IDBRequest).result;
       switch (data.type) {
         case "string":
-          createStringPasteUi(data);
+          createStringPasteUi(data, mimetype);
           break;
         case "blob":
           createBlobPasteUi(data);
@@ -70,7 +71,7 @@ function loadFromDb() {
   };
 }
 
-function createStringPasteUi(data) {
+function createStringPasteUi(data, type: string) {
   let bodyEle = document.getElementsByTagName("body")[0];
   bodyEle.textContent = '';
 
@@ -83,6 +84,14 @@ function createStringPasteUi(data) {
   headerEle.classList.add("centered");
   headerEle.textContent = data.expiration;
   preEle.appendChild(headerEle);
+
+  let downloadEle = document.createElement("a");
+  downloadEle.href = URL.createObjectURL(new Blob([data.data], { type }));
+  downloadEle.download = window.location.pathname;
+  downloadEle.classList.add("hljs-meta");
+  downloadEle.classList.add("centered");
+  downloadEle.textContent = "Download file.";
+  preEle.appendChild(downloadEle);
 
   preEle.appendChild(document.createElement("hr"));
 
@@ -120,7 +129,6 @@ function createBlobPasteUi(data) {
   downloadEle.textContent = "Download binary file.";
   divEle.appendChild(downloadEle);
 
-
   mainEle.appendChild(divEle);
 
   let displayAnywayEle = document.createElement("p");
@@ -130,7 +138,7 @@ function createBlobPasteUi(data) {
   displayAnywayEle.onclick = () => {
     data.data.text().then(text => {
       data.data = text;
-      createStringPasteUi(data);
+      createStringPasteUi(data, "application/octet-stream");
     })
   };
   mainEle.appendChild(displayAnywayEle);
