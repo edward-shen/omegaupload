@@ -89,10 +89,24 @@ fn main() {
     };
 
     let (key, needs_pw) = {
-        let partial_parsed_url = url
-            .split_once('#')
-            .and_then(|(_, fragment)| PartialParsedUrl::try_from(fragment).ok())
-            .unwrap_or_default();
+        let fragment = match url.split_once('#').map(|(_, fragment)| fragment) {
+            Some(fragment) => fragment,
+            None => {
+                error!("Key is missing in url; bailing.");
+                render_message("Invalid paste link: Missing decryption key.".into());
+                return;
+            }
+        };
+
+        let partial_parsed_url = match PartialParsedUrl::try_from(fragment) {
+            Ok(partial_parsed_url) => partial_parsed_url,
+            Err(e) => {
+                error!("Failed to parse text fragment; bailing.");
+                render_message(format!("Invalid paste link: {}", e.to_string()).into());
+                return;
+            }
+        };
+
         let key = if let Some(key) = partial_parsed_url.decryption_key {
             key
         } else {
@@ -100,6 +114,7 @@ fn main() {
             render_message("Invalid paste link: Missing decryption key.".into());
             return;
         };
+
         (key, partial_parsed_url.needs_password)
     };
 

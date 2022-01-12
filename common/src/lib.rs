@@ -142,6 +142,8 @@ pub enum ParseUrlError {
     BadUrl,
     #[error("Missing decryption key")]
     NeedKey,
+    #[error(transparent)]
+    InvalidKey(#[from] PartialParsedUrlParseError),
 }
 
 impl FromStr for ParsedUrl {
@@ -157,7 +159,7 @@ impl FromStr for ParsedUrl {
         let PartialParsedUrl {
             mut decryption_key,
             needs_password,
-        } = PartialParsedUrl::try_from(fragment).unwrap_or_default();
+        } = PartialParsedUrl::try_from(fragment)?;
 
         url.set_fragment(None);
 
