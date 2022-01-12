@@ -89,13 +89,12 @@ fn main() {
     };
 
     let (key, needs_pw) = {
-        let fragment = match url.split_once('#').map(|(_, fragment)| fragment) {
-            Some(fragment) => fragment,
-            None => {
-                error!("Key is missing in url; bailing.");
-                render_message("Invalid paste link: Missing decryption key.".into());
-                return;
-            }
+        let fragment = if let Some(fragment) = url.split_once('#').map(|(_, fragment)| fragment) {
+            fragment
+        } else {
+            error!("Key is missing in url; bailing.");
+            render_message("Invalid paste link: Missing decryption key.".into());
+            return;
         };
 
         let partial_parsed_url = match PartialParsedUrl::try_from(fragment) {
