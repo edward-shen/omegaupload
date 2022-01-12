@@ -57,7 +57,7 @@ pub fn decrypt(
     open_in_place(&mut container, key, maybe_password)?;
 
     let mime_type = tree_magic_mini::from_u8(&container);
-    log!("Mimetype: ", mime_type);
+    log!("Mime type: ", mime_type);
 
     log!("Blob conversion started.");
     let start = now();
@@ -76,51 +76,121 @@ pub fn decrypt(
 
     log!(format!("Blob conversion completed in {}ms", now() - start));
 
-    if mime_type.starts_with("text/") || mime_type == "application/mbox" {
-        if let Ok(string) = String::from_utf8(container) {
-            Ok(DecryptedData::String(Arc::new(string)))
-        } else {
-            Ok(DecryptedData::Blob(blob))
-        }
-    } else if mime_type.starts_with("image/")
-        // application/x-riff is WebP
-        || mime_type == "application/x-riff"
-    {
-        Ok(DecryptedData::Image(blob, container.len()))
-    } else if mime_type.starts_with("audio/") {
-        Ok(DecryptedData::Audio(blob))
-    } else if mime_type.starts_with("video/")
-        // application/x-matroska is mkv
-        || mime_type == "application/x-matroska"
-    {
-        Ok(DecryptedData::Video(blob))
-    } else if mime_type == "application/zip" {
-        let mut entries = vec![];
-        let cursor = Cursor::new(container);
-        if let Ok(mut zip) = zip::ZipArchive::new(cursor) {
-            for i in 0..zip.len() {
-                match zip.by_index(i) {
-                    Ok(file) => entries.push(ArchiveMeta {
-                        name: file.name().to_string(),
-                        file_size: file.size(),
-                    }),
-                    Err(err) => match err {
-                        zip::result::ZipError::UnsupportedArchive(s) => {
-                            log!("Unsupported: ", s.to_string());
-                        }
-                        _ => {
-                            log!(format!("Error: {}", err));
-                        }
-                    },
+    match container.content_type() {
+        ContentType::Text => Ok(DecryptedData::String(Arc::new(
+            // SAFETY: ContentType::Text is guaranteed to be valid UTF-8.
+            unsafe { String::from_utf8_unchecked(container) },
+        ))),
+        ContentType::Image => Ok(DecryptedData::Image(blob, container.len())),
+        ContentType::Audio => Ok(DecryptedData::Audio(blob)),
+        ContentType::Video => Ok(DecryptedData::Video(blob)),
+        ContentType::ZipArchive => {
+            let mut entries = vec![];
+            let cursor = Cursor::new(container);
+            if let Ok(mut zip) = zip::ZipArchive::new(cursor) {
+                for i in 0..zip.len() {
+                    match zip.by_index(i) {
+                        Ok(file) => entries.push(ArchiveMeta {
+                            name: file.name().to_string(),
+                            file_size: file.size(),
+                        }),
+                        Err(err) => match err {
+                            zip::result::ZipError::UnsupportedArchive(s) => {
+                                log!("Unsupported: ", s.to_string());
+                            }
+                            _ => {
+                                log!(format!("Error: {}", err));
+                            }
+                        },
+                    }
                 }
             }
-        }
 
-        entries.sort_by(|a, b| a.name.cmp(&b.name));
-        Ok(DecryptedData::Archive(blob, entries))
-    } else if mime_type == "application/gzip" {
-        Ok(DecryptedData::Archive(blob, vec![]))
-    } else {
-        Ok(DecryptedData::Blob(blob))
+            entries.sort_by(|a, b| a.name.cmp(&b.name));
+            Ok(DecryptedData::Archive(blob, entries))
+        }
+        ContentType::GzipArchive => Ok(DecryptedData::Archive(blob, vec![])),
+        ContentType::Unknown => Ok(DecryptedData::Blob(blob)),
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum ContentType {
+    Text,
+    Image,
+    Audio,
+    Video,
+    ZipArchive,
+    GzipArchive,
+    Unknown,
+}
+
+trait ContentTypeExt {
+    fn mime_type(&self) -> &str;
+    fn content_type(&self) -> ContentType;
+}
+
+impl<T: AsRef<[u8]>> ContentTypeExt for T {
+    fn mime_type(&self) -> &str {
+        tree_magic_mini::from_u8(self.as_ref())
+    }
+
+    fn content_type(&self) -> ContentType {
+        let mime_type = self.mime_type();
+        if mime_type.starts_with("text/") || mime_type == "application/mbox" {
+            if std::str::from_utf8(self.as_ref()).is_ok() {
+                ContentType::Text
+            } else {
+                ContentType::Unknown
+            }
+        } else if mime_type.starts_with("image/")
+            // application/x-riff is WebP
+            || mime_type == "application/x-riff"
+        {
+            ContentType::Image
+        } else if mime_type.starts_with("audio/") {
+            ContentType::Audio
+        } else if mime_type.starts_with("video/")
+            // application/x-matroska is mkv
+            || mime_type == "application/x-matroska"
+        {
+            ContentType::Video
+        } else if mime_type == "application/zip" {
+            ContentType::ZipArchive
+        } else if mime_type == "application/gzip" {
+            ContentType::GzipArchive
+        } else {
+            ContentType::Unknown
+        }
+    }
+}
+
+#[cfg(test)]
+mod content_type {
+    use super::*;
+
+    macro_rules! test_content_type {
+        ($($name:ident, $path:literal, $type:expr),*) => {
+            $(
+                #[test]
+                fn $name() {
+                    let data = include_bytes!(concat!("../../test/", $path));
+                    assert_eq!(data.content_type(), $type);
+                }
+            )*
+        };
+    }
+
+    test_content_type!(license_is_text, "LICENSE.md", ContentType::Text);
+    test_content_type!(code_is_text, "code.rs", ContentType::Text);
+    test_content_type!(patch_is_text, "0000-test-patch.patch", ContentType::Text);
+    test_content_type!(png_is_image, "image.png", ContentType::Image);
+    test_content_type!(webp_is_image, "image.webp", ContentType::Image);
+    test_content_type!(svg_is_image, "image.svg", ContentType::Image);
+    test_content_type!(mp3_is_audio, "music.mp3", ContentType::Audio);
+    test_content_type!(mp4_is_video, "movie.mp4", ContentType::Video);
+    test_content_type!(mkv_is_video, "movie.mkv", ContentType::Video);
+    test_content_type!(zip_is_zip, "archive.zip", ContentType::ZipArchive);
+    test_content_type!(gzip_is_gzip, "image.png.gz", ContentType::GzipArchive);
+    test_content_type!(binary_is_unknown, "omegaupload", ContentType::Unknown);
 }

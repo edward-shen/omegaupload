@@ -4,8 +4,12 @@ This folder contains mixed media that are under different licenses.
 - `movie.mp4` is a 10 second snippet of Big Buck Bunny sourced at
   http://bbb3d.renderfarming.net/download.html under the Attribution 3.0
   Unported (CC BY 3.0) license.
+- `movie.mkv` is identical to `movie.mp4` but transcoded as a `.mkv` file. It is
+  under the same license as `movie.mp4`.
 - `image.png` has all rights reserved, with the sole exception of copying and
   distribution for testing purposes for this project only.
+- `image.png.gz` is under the same license as `image.png`.
+- `image.webp` is under the same license as `image.png`.
 - All other files are dual-licensed under the CC0 1.0 Universal License or MIT
   No Attribution License, at your convenience.
 
