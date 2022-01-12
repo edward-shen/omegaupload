@@ -141,7 +141,8 @@ impl<T: AsRef<[u8]>> ContentTypeExt for T {
 
     fn content_type(&self) -> ContentType {
         let mime_type = self.mime_type();
-        if mime_type.starts_with("image/") // check image first because svg is image
+        // check image first; tree magic match_u8 matches SVGs as plain text
+        if mime_type.starts_with("image/")
             // application/x-riff is WebP
             || mime_type == "application/x-riff"
         {
