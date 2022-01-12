@@ -17,7 +17,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::PathBuf;
 
 use anyhow::{anyhow, bail, Context, Result};
@@ -50,7 +50,9 @@ enum Action {
         password: bool,
         #[clap(short, long)]
         duration: Option<Expiration>,
-        path: PathBuf,
+        /// The path to the file to upload. If none is provided, then reads
+        /// stdin instead.
+        path: Option<PathBuf>,
     },
     Download {
         /// The paste to download.
@@ -78,12 +80,27 @@ fn handle_upload(
     mut url: Url,
     password: bool,
     duration: Option<Expiration>,
-    path: PathBuf,
+    path: Option<PathBuf>,
 ) -> Result<()> {
     url.set_fragment(None);
 
+    if password && path.is_none() {
+        bail!("Reading data from stdin is incompatible with a password. Provide a path to a file to upload.");
+    }
+
     let (data, key) = {
-        let mut container = std::fs::read(path)?;
+        let mut container = if let Some(path) = path {
+            std::fs::read(path)?
+        } else {
+            let mut container = vec![];
+            std::io::stdin().lock().read_to_end(&mut container)?;
+            container
+        };
+
+        if container.is_empty() {
+            bail!("Nothing to upload.");
+        }
+
         let password = if password {
             let maybe_password =
                 prompt_password_stderr("Please set the password for this paste: ")?;
