@@ -141,17 +141,17 @@ impl<T: AsRef<[u8]>> ContentTypeExt for T {
 
     fn content_type(&self) -> ContentType {
         let mime_type = self.mime_type();
-        if mime_type.starts_with("text/") || mime_type == "application/mbox" {
+        if mime_type.starts_with("image/") // check image first because svg is image
+            // application/x-riff is WebP
+            || mime_type == "application/x-riff"
+        {
+            ContentType::Image
+        } else if tree_magic_mini::match_u8("text/plain", self.as_ref()) {
             if std::str::from_utf8(self.as_ref()).is_ok() {
                 ContentType::Text
             } else {
                 ContentType::Unknown
             }
-        } else if mime_type.starts_with("image/")
-            // application/x-riff is WebP
-            || mime_type == "application/x-riff"
-        {
-            ContentType::Image
         } else if mime_type.starts_with("audio/") {
             ContentType::Audio
         } else if mime_type.starts_with("video/")
@@ -197,4 +197,5 @@ mod content_type {
     test_content_type!(zip_is_zip, "archive.zip", ContentType::ZipArchive);
     test_content_type!(gzip_is_gzip, "image.png.gz", ContentType::GzipArchive);
     test_content_type!(binary_is_unknown, "omegaupload", ContentType::Unknown);
+    test_content_type!(pgp_is_text, "text.pgp", ContentType::Text);
 }
