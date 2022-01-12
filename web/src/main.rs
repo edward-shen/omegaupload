@@ -90,10 +90,16 @@ fn main() {
 
     let (key, needs_pw) = {
         let fragment = if let Some(fragment) = url.split_once('#').map(|(_, fragment)| fragment) {
-            fragment
+            if fragment.is_empty() {
+                error!("Key is missing in url; bailing.");
+                render_message("Invalid paste link: Missing metadata.".into());
+                return;
+            } else {
+                fragment
+            }
         } else {
             error!("Key is missing in url; bailing.");
-            render_message("Invalid paste link: Missing decryption key.".into());
+            render_message("Invalid paste link: Missing metadata.".into());
             return;
         };
 
