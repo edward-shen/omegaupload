@@ -76,7 +76,7 @@ pub fn decrypt(
 
     log!(format!("Blob conversion completed in {}ms", now() - start));
 
-    if mime_type.starts_with("text/") {
+    if mime_type.starts_with("text/") || mime_type == "application/mbox" {
         if let Ok(string) = String::from_utf8(container) {
             Ok(DecryptedData::String(Arc::new(string)))
         } else {
