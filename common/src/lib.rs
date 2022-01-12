@@ -22,6 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+use std::convert::Infallible;
 use std::fmt::Display;
 use std::str::FromStr;
 
@@ -48,10 +49,26 @@ pub struct ParsedUrl {
     pub needs_password: bool,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct PartialParsedUrl {
     pub decryption_key: Option<Secret<Key>>,
     pub needs_password: bool,
+}
+
+#[cfg(test)]
+impl PartialEq for PartialParsedUrl {
+    fn eq(&self, other: &Self) -> bool {
+        use secrecy::ExposeSecret;
+        let decryption_key_matches = {
+            match (self.decryption_key.as_ref(), other.decryption_key.as_ref()) {
+                (Some(key), Some(other)) => key.expose_secret() == other.expose_secret(),
+                (None, None) => true,
+                _ => false,
+            }
+        };
+
+        decryption_key_matches && self.needs_password == other.needs_password
+    }
 }
 
 impl From<&str> for PartialParsedUrl {
@@ -97,6 +114,14 @@ impl From<&str> for PartialParsedUrl {
             decryption_key,
             needs_password,
         }
+    }
+}
+
+impl FromStr for PartialParsedUrl {
+    type Err = Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from(s))
     }
 }
 
@@ -272,5 +297,94 @@ impl TryFrom<&str> for Expiration {
 impl Default for Expiration {
     fn default() -> Self {
         Self::UnixTime(Utc::now() + Duration::days(1))
+    }
+}
+
+#[cfg(test)]
+mod partial_parsed_url_parsing {
+    use secrecy::Secret;
+
+    use crate::base64;
+    use crate::crypto::Key;
+    use crate::PartialParsedUrl;
+
+    #[test]
+    fn empty() {
+        assert_eq!("".parse(), Ok(PartialParsedUrl::default()));
+    }
+
+    const DECRYPTION_KEY_STRING: &str = "ddLod7sGy_EjFDjWqZoH4i5n_XU8bIpEuEo3-pjfAIE=";
+
+    fn decryption_key() -> Option<Secret<Key>> {
+        Key::new_secret(base64::decode(DECRYPTION_KEY_STRING).unwrap())
+    }
+
+    #[test]
+    fn clean_no_password() {
+        assert_eq!(
+            DECRYPTION_KEY_STRING.parse(),
+            Ok(PartialParsedUrl {
+                decryption_key: decryption_key(),
+                needs_password: false
+            })
+        );
+    }
+
+    #[test]
+    fn no_password() {
+        let input = "key:ddLod7sGy_EjFDjWqZoH4i5n_XU8bIpEuEo3-pjfAIE=";
+        assert_eq!(
+            input.parse(),
+            Ok(PartialParsedUrl {
+                decryption_key: decryption_key(),
+                needs_password: false
+            })
+        );
+    }
+
+    #[test]
+    fn with_password() {
+        let input = "key:ddLod7sGy_EjFDjWqZoH4i5n_XU8bIpEuEo3-pjfAIE=!pw";
+        assert_eq!(
+            input.parse(),
+            Ok(PartialParsedUrl {
+                decryption_key: decryption_key(),
+                needs_password: true
+            })
+        );
+    }
+
+    #[test]
+    fn order_does_not_matter() {
+        let input = "pw!key:ddLod7sGy_EjFDjWqZoH4i5n_XU8bIpEuEo3-pjfAIE=";
+        assert_eq!(
+            input.parse(),
+            Ok(PartialParsedUrl {
+                decryption_key: decryption_key(),
+                needs_password: true
+            })
+        );
+    }
+
+    #[test]
+    fn empty_key_pair_gracefully_fails() {
+        let input = "!!!key:ddLod7sGy_EjFDjWqZoH4i5n_XU8bIpEuEo3-pjfAIE=!!!";
+        assert_eq!(
+            input.parse(),
+            Ok(PartialParsedUrl {
+                decryption_key: decryption_key(),
+                needs_password: false
+            })
+        );
+    }
+
+    #[test]
+    fn invalid_decryption_key_gracefully_fails() {
+        assert_eq!("invalid key".parse(), Ok(PartialParsedUrl::default()));
+    }
+
+    #[test]
+    fn unknown_fields_are_ignored() {
+        assert_eq!("!!a!!b!!c".parse(), Ok(PartialParsedUrl::default()));
     }
 }

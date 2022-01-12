@@ -27,7 +27,7 @@ use chacha20poly1305::aead::{AeadInPlace, NewAead};
 use chacha20poly1305::XChaCha20Poly1305;
 use chacha20poly1305::XNonce;
 use rand::{CryptoRng, Rng};
-use secrecy::{ExposeSecret, Secret, SecretVec, Zeroize};
+use secrecy::{DebugSecret, ExposeSecret, Secret, SecretVec, Zeroize};
 use typenum::Unsigned;
 
 #[derive(Debug, thiserror::Error)]
@@ -43,7 +43,7 @@ pub enum Error {
 }
 
 // This struct intentionally prevents implement Clone or Copy
-#[derive(Default)]
+#[derive(Default, PartialEq, Eq)]
 pub struct Key(chacha20poly1305::Key);
 
 impl Key {
@@ -54,6 +54,8 @@ impl Key {
             .map(Secret::new)
     }
 }
+
+impl DebugSecret for Key {}
 
 impl AsRef<chacha20poly1305::Key> for Key {
     fn as_ref(&self) -> &chacha20poly1305::Key {
