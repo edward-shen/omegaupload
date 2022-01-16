@@ -16,7 +16,16 @@
 
 // Exported to main.rs
 function loadFromDb(mimeType: string, name?: string, language?: string) {
-  console.log("[js] Got name:", name);
+  let resolvedName;
+  if (name) {
+    resolvedName = name;
+  } else {
+    const pathName = window.location.pathname;
+    const leafIndex = pathName.indexOf("/");
+    resolvedName = pathName.slice(leafIndex + 1);
+  }
+
+  console.log("[js] Resolved name:", resolvedName);
   console.log("[js] Got language:", language);
   console.log("[js] Got mime type:", mimeType);
 
@@ -31,22 +40,22 @@ function loadFromDb(mimeType: string, name?: string, language?: string) {
       const data = (evt.target as IDBRequest).result;
       switch (data.type) {
         case "string":
-          createStringPasteUi(data, mimeType, name, language);
+          createStringPasteUi(data, mimeType, resolvedName, language);
           break;
         case "blob":
-          createBlobPasteUi(data, name);
+          createBlobPasteUi(data, resolvedName);
           break;
         case "image":
-          createImagePasteUi(data, name);
+          createImagePasteUi(data, resolvedName);
           break;
         case "audio":
-          createAudioPasteUi(data, name);
+          createAudioPasteUi(data, resolvedName);
           break;
         case "video":
-          createVideoPasteUi(data, name);
+          createVideoPasteUi(data, resolvedName);
           break;
         case "archive":
-          createArchivePasteUi(data, name);
+          createArchivePasteUi(data, resolvedName);
           break;
         default:
           renderMessage("Something went wrong. Try clearing local data.");
@@ -74,7 +83,7 @@ function loadFromDb(mimeType: string, name?: string, language?: string) {
   };
 }
 
-function createStringPasteUi(data, mimeType: string, name?: string, lang?: string) {
+function createStringPasteUi(data, mimeType: string, name: string, lang?: string) {
   const bodyEle = document.getElementsByTagName("body")[0];
   bodyEle.textContent = '';
 
@@ -154,7 +163,7 @@ function createStringPasteUi(data, mimeType: string, name?: string, lang?: strin
   hljs.initLineNumbersOnLoad();
 }
 
-function createBlobPasteUi(data, name?: string) {
+function createBlobPasteUi(data, name: string) {
   const bodyEle = document.getElementsByTagName("body")[0];
   bodyEle.textContent = '';
 
@@ -186,14 +195,14 @@ function createBlobPasteUi(data, name?: string) {
   displayAnywayEle.onclick = () => {
     data.data.text().then(text => {
       data.data = text;
-      createStringPasteUi(data, "application/octet-stream");
+      createStringPasteUi(data, "application/octet-stream", name);
     })
   };
   mainEle.appendChild(displayAnywayEle);
   bodyEle.appendChild(mainEle);
 }
 
-function createImagePasteUi({ expiration, data, file_size }, name?: string) {
+function createImagePasteUi({ expiration, data, file_size }, name: string) {
   createMultiMediaPasteUi("img", expiration, data, name, (downloadEle, imgEle) => {
     imgEle.onload = () => {
       const width = imgEle.naturalWidth || imgEle.width;
@@ -203,15 +212,15 @@ function createImagePasteUi({ expiration, data, file_size }, name?: string) {
   });
 }
 
-function createAudioPasteUi({ expiration, data }, name?: string) {
+function createAudioPasteUi({ expiration, data }, name: string) {
   createMultiMediaPasteUi("audio", expiration, data, name, "Download");
 }
 
-function createVideoPasteUi({ expiration, data }, name?: string) {
+function createVideoPasteUi({ expiration, data }, name: string) {
   createMultiMediaPasteUi("video", expiration, data, name, "Download");
 }
 
-function createArchivePasteUi({ expiration, data, entries }, name?: string) {
+function createArchivePasteUi({ expiration, data, entries }, name: string) {
   const bodyEle = document.getElementsByTagName("body")[0];
   bodyEle.textContent = '';
 
@@ -272,7 +281,7 @@ function createArchivePasteUi({ expiration, data, entries }, name?: string) {
   bodyEle.appendChild(mainEle);
 }
 
-function createMultiMediaPasteUi(tag, expiration, data, name?: string, on_create?: Function | string) {
+function createMultiMediaPasteUi(tag, expiration, data, name: string, on_create?: Function | string) {
   const bodyEle = document.getElementsByTagName("body")[0];
   bodyEle.textContent = '';
 
