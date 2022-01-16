@@ -54,7 +54,7 @@ function loadFromDb(mimeType: string, name?: string, language?: string) {
       }
 
       // IDB was only used as a temporary medium;
-      window.onbeforeunload = (e) => {
+      window.onbeforeunload = (_e) => {
         // See https://link.eddie.sh/NrIIq on why .commit is necessary.
         const transaction = db.transaction("decrypted data", "readwrite");
         transaction
@@ -268,7 +268,7 @@ function createArchivePasteUi({ expiration, data, entries }, name?: string) {
   bodyEle.appendChild(mainEle);
 }
 
-function createMultiMediaPasteUi(tag, expiration, data, name?: string, on_create?) {
+function createMultiMediaPasteUi(tag, expiration, data, name?: string, on_create?: Function | string) {
   const bodyEle = document.getElementsByTagName("body")[0];
   bodyEle.textContent = '';
 
