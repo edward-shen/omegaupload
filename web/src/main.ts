@@ -106,13 +106,44 @@ function createStringPasteUi(data, mimeType: string, name?: string, lang?: strin
   mainEle.appendChild(preEle);
   bodyEle.appendChild(mainEle);
 
+  let languages = undefined;
+
   if (!hljs.getLanguage(lang)) {
-    console.warn(`[js] User provided language (${lang}) is not known. Ignoring.`);
+    console.warn(`[js] User provided language (${lang}) is not known.`);
   } else {
-    console.log(`[js] Selecting user provided language ${lang} for highlighting.`);
-    hljs.configure({
-      languages: [lang],
-    });
+    languages = [lang];
+  }
+
+  // If a language wasn't provided, see if we can use the file extension to give
+  // us a better hint for hljs
+  if (!languages) {
+    if (name) {
+      console.log("[js] Trying to infer from file name...");
+      const periodIndex = name.indexOf(".");
+      if (periodIndex === -1) {
+        console.warn("[js] Did not find file extension.")
+      } else {
+        let extension = name.slice(periodIndex + 1);
+        console.info(`[js] Found extension ${extension}.`);
+        if (!hljs.getLanguage(extension)) {
+          console.warn(`[js] Extension was not recognized by hljs. Giving up.`);
+        } else {
+          console.info("[js] Successfully inferred language from file extension.");
+          languages = [extension];
+        }
+      }
+    } else {
+      console.log("[js] No file name hint provided.");
+    }
+  } else {
+    console.info(`[js] Selecting user provided language ${languages[0]} for highlighting.`);
+  }
+
+  // If we still haven't set languages here, then we're leaving it up to the
+  if (!languages) {
+    console.log("[js] Deferring to hljs inference for syntax highlighting.");
+  } else {
+    hljs.configure({ languages });
   }
 
   hljs.highlightAll();
