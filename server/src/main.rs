@@ -97,7 +97,7 @@ async fn main() -> Result<()> {
                 .route("/:code", get(|| async { INDEX_PAGE }))
                 .nest("/static", root_service)
                 .route(
-                    &format!("{}{}", API_ENDPOINT.to_string(), "/:code"),
+                    &format!("{}{}", API_ENDPOINT, "/:code"),
                     get(paste::<SHORT_CODE_SIZE>).delete(delete::<SHORT_CODE_SIZE>),
                 )
                 .layer(AddExtensionLayer::new(db))

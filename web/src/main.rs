@@ -94,9 +94,8 @@ fn main() {
                 error!("Key is missing in url; bailing.");
                 render_message("Invalid paste link: Missing metadata.".into());
                 return;
-            } else {
-                fragment
             }
+            fragment
         } else {
             error!("Key is missing in url; bailing.");
             render_message("Invalid paste link: Missing metadata.".into());
@@ -107,7 +106,7 @@ fn main() {
             Ok(partial_parsed_url) => partial_parsed_url,
             Err(e) => {
                 error!("Failed to parse text fragment; bailing.");
-                render_message(format!("Invalid paste link: {}", e.to_string()).into());
+                render_message(format!("Invalid paste link: {}", e).into());
                 return;
             }
         };
