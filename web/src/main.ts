@@ -109,7 +109,11 @@ function createStringPasteUi(data, mimeType: string, name?: string, lang?: strin
   let languages = undefined;
 
   if (!hljs.getLanguage(lang)) {
-    console.warn(`[js] User provided language (${lang}) is not known.`);
+    if (lang) {
+      console.warn(`[js] User provided language (${lang}) is not known.`);
+    } else {
+      console.info(`[js] Language hint not provided.`);
+    }
   } else {
     languages = [lang];
   }
