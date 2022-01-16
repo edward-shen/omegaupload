@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# OmegaUpload Build Script
+# OmegaUpload Update Web Dependencies Script
 # Copyright (C) 2021  Edward Shen
 #
 # This program is free software: you can redistribute it and/or modify
