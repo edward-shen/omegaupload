@@ -86,61 +86,65 @@ pub fn decrypt(
         ContentType::Image => DecryptedData::Image(blob, container.len()),
         ContentType::Audio => DecryptedData::Audio(blob),
         ContentType::Video => DecryptedData::Video(blob),
-        ContentType::ZipArchive => {
-            let mut entries = vec![];
-            let cursor = Cursor::new(container);
-            if let Ok(mut zip) = zip::ZipArchive::new(cursor) {
-                for i in 0..zip.len() {
-                    match zip.by_index(i) {
-                        Ok(file) => entries.push(ArchiveMeta {
-                            name: file.name().to_string(),
-                            file_size: file.size(),
-                        }),
-                        Err(err) => match err {
-                            zip::result::ZipError::UnsupportedArchive(s) => {
-                                log!("Unsupported: ", s.to_string());
-                            }
-                            _ => {
-                                log!(format!("Error: {}", err));
-                            }
-                        },
-                    }
-                }
-            }
-
-            entries.sort_by(|a, b| a.name.cmp(&b.name));
-            DecryptedData::Archive(blob, entries)
-        }
-        ContentType::Gzip => {
-            let mut entries = vec![];
-            let cursor = Cursor::new(container);
-            let gzip_dec = flate2::read::GzDecoder::new(cursor);
-            let mut archive = tar::Archive::new(gzip_dec);
-            if let Ok(files) = archive.entries() {
-                for file in files {
-                    if let Ok(file) = file {
-                        let file_path = if let Ok(file_path) = file.path() {
-                            file_path.display().to_string()
-                        } else {
-                            "<Invalid utf-8 path>".to_string()
-                        };
-                        entries.push(ArchiveMeta {
-                            name: file_path,
-                            file_size: file.size(),
-                        });
-                    }
-                }
-            }
-            if entries.len() > 0 {
-                DecryptedData::Archive(blob, entries)
-            } else {
-                DecryptedData::Blob(blob)
-            }
-        }
+        ContentType::ZipArchive => handle_zip_archive(blob, container),
+        ContentType::Gzip => handle_gzip(blob, container),
         ContentType::Unknown => DecryptedData::Blob(blob),
     };
 
     Ok((data, MimeType(mime_type.to_owned())))
+}
+
+fn handle_zip_archive(blob: Arc<Blob>, container: Vec<u8>) -> DecryptedData {
+    let mut entries = vec![];
+    let cursor = Cursor::new(container);
+    if let Ok(mut zip) = zip::ZipArchive::new(cursor) {
+        for i in 0..zip.len() {
+            match zip.by_index(i) {
+                Ok(file) => entries.push(ArchiveMeta {
+                    name: file.name().to_string(),
+                    file_size: file.size(),
+                }),
+                Err(err) => match err {
+                    zip::result::ZipError::UnsupportedArchive(s) => {
+                        log!("Unsupported: ", s.to_string());
+                    }
+                    _ => {
+                        log!(format!("Error: {}", err));
+                    }
+                },
+            }
+        }
+    }
+
+    entries.sort_by(|a, b| a.name.cmp(&b.name));
+    DecryptedData::Archive(blob, entries)
+}
+
+fn handle_gzip(blob: Arc<Blob>, container: Vec<u8>) -> DecryptedData {
+    let mut entries = vec![];
+    let cursor = Cursor::new(container);
+    let gzip_dec = flate2::read::GzDecoder::new(cursor);
+    let mut archive = tar::Archive::new(gzip_dec);
+    if let Ok(files) = archive.entries() {
+        for file in files {
+            if let Ok(file) = file {
+                let file_path = if let Ok(file_path) = file.path() {
+                    file_path.display().to_string()
+                } else {
+                    "<Invalid utf-8 path>".to_string()
+                };
+                entries.push(ArchiveMeta {
+                    name: file_path,
+                    file_size: file.size(),
+                });
+            }
+        }
+    }
+    if entries.len() > 0 {
+        DecryptedData::Archive(blob, entries)
+    } else {
+        DecryptedData::Blob(blob)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
