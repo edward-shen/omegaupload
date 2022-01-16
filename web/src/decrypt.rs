@@ -126,24 +126,22 @@ fn handle_gzip(blob: Arc<Blob>, container: Vec<u8>) -> DecryptedData {
     let gzip_dec = flate2::read::GzDecoder::new(cursor);
     let mut archive = tar::Archive::new(gzip_dec);
     if let Ok(files) = archive.entries() {
-        for file in files {
-            if let Ok(file) = file {
-                let file_path = if let Ok(file_path) = file.path() {
-                    file_path.display().to_string()
-                } else {
-                    "<Invalid utf-8 path>".to_string()
-                };
-                entries.push(ArchiveMeta {
-                    name: file_path,
-                    file_size: file.size(),
-                });
-            }
+        for file in files.flatten() {
+            let file_path = if let Ok(file_path) = file.path() {
+                file_path.display().to_string()
+            } else {
+                "<Invalid utf-8 path>".to_string()
+            };
+            entries.push(ArchiveMeta {
+                name: file_path,
+                file_size: file.size(),
+            });
         }
     }
-    if entries.len() > 0 {
-        DecryptedData::Archive(blob, entries)
-    } else {
+    if entries.is_empty() {
         DecryptedData::Blob(blob)
+    } else {
+        DecryptedData::Archive(blob, entries)
     }
 }
 
