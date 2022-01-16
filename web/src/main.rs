@@ -310,7 +310,7 @@ fn on_success(
         .unwrap();
     put_action.set_onsuccess(Some(
         Closure::once(Box::new(|| {
-            log!("success");
+            log!("[rs] Successfully inserted encrypted item into storage.");
             let name = name.map(JsString::from);
             let language = language.map(JsString::from);
             load_from_db(JsString::from(mimetype.0), name, language);

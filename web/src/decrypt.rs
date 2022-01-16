@@ -59,9 +59,9 @@ pub fn decrypt(
     open_in_place(&mut container, key, maybe_password)?;
 
     let mime_type = tree_magic_mini::from_u8(&container);
-    log!("Mime type: ", mime_type);
+    log!("[rs] Mime type:", mime_type);
 
-    log!("Blob conversion started.");
+    log!("[rs] Blob conversion started.");
     let start = now();
     let blob_chunks = Array::new_with_length(container.chunks(65536).len().try_into().unwrap());
     for (i, chunk) in container.chunks(65536).enumerate() {
@@ -76,7 +76,10 @@ pub fn decrypt(
             .unwrap(),
     );
 
-    log!(format!("Blob conversion completed in {}ms", now() - start));
+    log!(format!(
+        "[rs] Blob conversion completed in {}ms",
+        now() - start
+    ));
 
     let data = match container.content_type() {
         ContentType::Text => DecryptedData::String(Arc::new(
