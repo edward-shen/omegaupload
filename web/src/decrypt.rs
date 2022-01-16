@@ -55,10 +55,11 @@ pub fn decrypt(
     mut container: Vec<u8>,
     key: &Secret<Key>,
     maybe_password: Option<SecretVec<u8>>,
+    name_hint: Option<&str>,
 ) -> Result<(DecryptedData, MimeType), Error> {
     open_in_place(&mut container, key, maybe_password)?;
 
-    let mime_type = tree_magic_mini::from_u8(&container);
+    let mime_type = guess_mime_type(name_hint, &container);
     log!("[rs] Mime type:", mime_type);
 
     log!("[rs] Blob conversion started.");
@@ -146,6 +147,23 @@ fn handle_gzip(blob: Arc<Blob>, container: Vec<u8>) -> DecryptedData {
     } else {
         DecryptedData::Archive(blob, entries)
     }
+}
+
+fn guess_mime_type(name_hint: Option<&str>, data: &[u8]) -> &'static str {
+    if let Some(name) = name_hint {
+        let guesses = mime_guess::from_path(name);
+        if let Some(mime_type) = guesses.first_raw() {
+            // Found at least one, but generally speaking this crate only
+            // uses authoritative sources (RFCs), so generally speaking
+            // there's only one association, and multiple are due to legacy
+            // support. As a result, we can probably just get the first one.
+            log!("[rs] Mime type inferred from extension.");
+            return mime_type;
+        } else {
+            log!("[rs] No mime type found for extension, falling back to introspection.");
+        }
+    }
+    tree_magic_mini::from_u8(&data)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]

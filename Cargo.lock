@@ -1030,6 +1030,7 @@ dependencies = [
  "gloo-console",
  "http",
  "js-sys",
+ "mime_guess",
  "omegaupload-common 0.1.0",
  "reqwasm",
  "serde",
