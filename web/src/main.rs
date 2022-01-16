@@ -47,7 +47,7 @@ const DOWNLOAD_SIZE_LIMIT: u128 = n_mib_bytes!(500);
 #[wasm_bindgen]
 extern "C" {
     #[wasm_bindgen(js_name = loadFromDb)]
-    pub fn load_from_db(mimetype: JsString);
+    pub fn load_from_db(mime_type: JsString, name: Option<JsString>, language: Option<JsString>);
     #[wasm_bindgen(js_name = renderMessage)]
     pub fn render_message(message: JsString);
 }
@@ -88,7 +88,15 @@ fn main() {
         Uri::from_parts(uri_parts).unwrap()
     };
 
-    let (key, needs_pw) = {
+    let (
+        key,
+        PartialParsedUrl {
+            needs_password,
+            name,
+            language,
+            ..
+        },
+    ) = {
         let fragment = if let Some(fragment) = url.split_once('#').map(|(_, fragment)| fragment) {
             if fragment.is_empty() {
                 error!("Key is missing in url; bailing.");
@@ -102,7 +110,7 @@ fn main() {
             return;
         };
 
-        let partial_parsed_url = match PartialParsedUrl::try_from(fragment) {
+        let mut partial_parsed_url = match PartialParsedUrl::try_from(fragment) {
             Ok(partial_parsed_url) => partial_parsed_url,
             Err(e) => {
                 error!("Failed to parse text fragment; bailing.");
@@ -111,7 +119,7 @@ fn main() {
             }
         };
 
-        let key = if let Some(key) = partial_parsed_url.decryption_key {
+        let key = if let Some(key) = partial_parsed_url.decryption_key.take() {
             key
         } else {
             error!("Key is missing in url; bailing.");
@@ -119,10 +127,10 @@ fn main() {
             return;
         };
 
-        (key, partial_parsed_url.needs_password)
+        (key, partial_parsed_url)
     };
 
-    let password = if needs_pw {
+    let password = if needs_password {
         loop {
             let pw = window().prompt_with_message("A password is required to decrypt this paste:");
 
@@ -150,7 +158,7 @@ fn main() {
     };
 
     spawn_local(async move {
-        if let Err(e) = fetch_resources(request_uri, key, password).await {
+        if let Err(e) = fetch_resources(request_uri, key, password, name, language).await {
             log!(e.to_string());
         }
     });
@@ -161,6 +169,8 @@ async fn fetch_resources(
     request_uri: Uri,
     key: Secret<Key>,
     password: Option<SecretVec<u8>>,
+    name: Option<String>,
+    language: Option<String>,
 ) -> Result<()> {
     match Request::get(&request_uri.to_string()).send().await {
         Ok(resp) if resp.status() == StatusCode::OK => {
@@ -213,7 +223,7 @@ async fn fetch_resources(
             let db_open_req = open_idb()?;
 
             let on_success = Closure::once(Box::new(move |event| {
-                on_success(&event, &decrypted, mimetype, &expires);
+                on_success(&event, &decrypted, mimetype, &expires, name, language);
             }));
 
             db_open_req.set_onsuccess(Some(on_success.into_js_value().unchecked_ref()));
@@ -245,7 +255,14 @@ async fn fetch_resources(
     Ok(())
 }
 
-fn on_success(event: &Event, decrypted: &DecryptedData, mimetype: MimeType, expires: &str) {
+fn on_success(
+    event: &Event,
+    decrypted: &DecryptedData,
+    mimetype: MimeType,
+    expires: &str,
+    name: Option<String>,
+    language: Option<String>,
+) {
     let transaction: IdbObjectStore = as_idb_db(event)
         .transaction_with_str_and_mode("decrypted data", IdbTransactionMode::Readwrite)
         .unwrap()
@@ -294,7 +311,9 @@ fn on_success(event: &Event, decrypted: &DecryptedData, mimetype: MimeType, expi
     put_action.set_onsuccess(Some(
         Closure::once(Box::new(|| {
             log!("success");
-            load_from_db(JsString::from(mimetype.0));
+            let name = name.map(JsString::from);
+            let language = language.map(JsString::from);
+            load_from_db(JsString::from(mimetype.0), name, language);
         }))
         .into_js_value()
         .unchecked_ref(),

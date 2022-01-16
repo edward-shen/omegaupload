@@ -15,35 +15,38 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 // Exported to main.rs
-function loadFromDb(mimetype: string) {
-  console.log("Got mime type:", mimetype);
+function loadFromDb(mimeType: string, name?: string, language?: string) {
+  console.log("[js] Got name:", name);
+  console.log("[js] Got language:", language);
+  console.log("[js] Got mime type:", mimeType);
+
   const dbReq = window.indexedDB.open("omegaupload", 1);
   dbReq.onsuccess = (evt) => {
     const db = (evt.target as IDBRequest).result;
     const obj_store = db
       .transaction("decrypted data")
       .objectStore("decrypted data");
-    let fetchReq = obj_store.get(window.location.pathname);
+    const fetchReq = obj_store.get(window.location.pathname);
     fetchReq.onsuccess = (evt) => {
       const data = (evt.target as IDBRequest).result;
       switch (data.type) {
         case "string":
-          createStringPasteUi(data, mimetype);
+          createStringPasteUi(data, mimeType, name, language);
           break;
         case "blob":
-          createBlobPasteUi(data);
+          createBlobPasteUi(data, name);
           break;
         case "image":
-          createImagePasteUi(data);
+          createImagePasteUi(data, name);
           break;
         case "audio":
-          createAudioPasteUi(data);
+          createAudioPasteUi(data, name);
           break;
         case "video":
-          createVideoPasteUi(data);
+          createVideoPasteUi(data, name);
           break;
         case "archive":
-          createArchivePasteUi(data);
+          createArchivePasteUi(data, name);
           break;
         default:
           renderMessage("Something went wrong. Try clearing local data.");
@@ -71,23 +74,24 @@ function loadFromDb(mimetype: string) {
   };
 }
 
-function createStringPasteUi(data, type: string) {
-  let bodyEle = document.getElementsByTagName("body")[0];
+function createStringPasteUi(data, mimeType: string, name?: string, lang?: string) {
+  const bodyEle = document.getElementsByTagName("body")[0];
   bodyEle.textContent = '';
 
-  let mainEle = document.createElement("main");
-  let preEle = document.createElement("pre");
+  const mainEle = document.createElement("main");
+  const preEle = document.createElement("pre");
   preEle.classList.add("paste");
 
-  let headerEle = document.createElement("p");
+  const headerEle = document.createElement("p");
   headerEle.classList.add("unselectable");
   headerEle.classList.add("centered");
   headerEle.textContent = data.expiration;
   preEle.appendChild(headerEle);
 
-  let downloadEle = document.createElement("a");
-  downloadEle.href = URL.createObjectURL(new Blob([data.data], { type }));
-  downloadEle.download = window.location.pathname;
+  const downloadEle = document.createElement("a");
+  downloadEle.href = getObjectUrl([data.data], mimeType);
+  downloadEle.download = name;
+
   downloadEle.classList.add("hljs-meta");
   downloadEle.classList.add("centered");
   downloadEle.textContent = "Download file.";
@@ -95,43 +99,52 @@ function createStringPasteUi(data, type: string) {
 
   preEle.appendChild(document.createElement("hr"));
 
-  let codeEle = document.createElement("code");
+  const codeEle = document.createElement("code");
   codeEle.textContent = data.data;
   preEle.appendChild(codeEle);
 
   mainEle.appendChild(preEle);
   bodyEle.appendChild(mainEle);
 
+  if (!hljs.getLanguage(lang)) {
+    console.warn(`[js] User provided language (${lang}) is not known. Ignoring.`);
+  } else {
+    console.log(`[js] Selecting user provided language ${lang} for highlighting.`);
+    hljs.configure({
+      languages: [lang],
+    });
+  }
+
   hljs.highlightAll();
   hljs.initLineNumbersOnLoad();
 }
 
-function createBlobPasteUi(data) {
-  let bodyEle = document.getElementsByTagName("body")[0];
+function createBlobPasteUi(data, name?: string) {
+  const bodyEle = document.getElementsByTagName("body")[0];
   bodyEle.textContent = '';
 
-  let mainEle = document.createElement("main");
+  const mainEle = document.createElement("main");
   mainEle.classList.add("hljs");
   mainEle.classList.add("centered");
   mainEle.classList.add("fullscreen");
 
-  let divEle = document.createElement("div");
+  const divEle = document.createElement("div");
   divEle.classList.add("centered");
 
-  let expirationEle = document.createElement("p");
+  const expirationEle = document.createElement("p");
   expirationEle.textContent = data.expiration;
   divEle.appendChild(expirationEle);
 
-  let downloadEle = document.createElement("a");
-  downloadEle.href = URL.createObjectURL(data.data);
-  downloadEle.download = window.location.pathname;
+  const downloadEle = document.createElement("a");
+  downloadEle.href = getObjectUrl(data.data, name);
+  downloadEle.download = name;
   downloadEle.classList.add("hljs-meta");
   downloadEle.textContent = "Download binary file.";
   divEle.appendChild(downloadEle);
 
   mainEle.appendChild(divEle);
 
-  let displayAnywayEle = document.createElement("p");
+  const displayAnywayEle = document.createElement("p");
   displayAnywayEle.classList.add("display-anyways");
   displayAnywayEle.classList.add("hljs-comment");
   displayAnywayEle.textContent = "Display anyways?";
@@ -145,41 +158,41 @@ function createBlobPasteUi(data) {
   bodyEle.appendChild(mainEle);
 }
 
-function createImagePasteUi({ expiration, data, file_size }) {
-  createMultiMediaPasteUi("img", expiration, data, (downloadEle, imgEle) => {
+function createImagePasteUi({ expiration, data, file_size }, name?: string) {
+  createMultiMediaPasteUi("img", expiration, data, name, (downloadEle, imgEle) => {
     imgEle.onload = () => {
-      let width = imgEle.naturalWidth || imgEle.width;
-      let height = imgEle.naturalHeight || imgEle.height;
+      const width = imgEle.naturalWidth || imgEle.width;
+      const height = imgEle.naturalHeight || imgEle.height;
       downloadEle.textContent = "Download " + file_size + " \u2014 " + width + " by " + height;
     }
   });
 }
 
-function createAudioPasteUi({ expiration, data }) {
-  createMultiMediaPasteUi("audio", expiration, data, "Download");
+function createAudioPasteUi({ expiration, data }, name?: string) {
+  createMultiMediaPasteUi("audio", expiration, data, name, "Download");
 }
 
-function createVideoPasteUi({ expiration, data }) {
-  createMultiMediaPasteUi("video", expiration, data, "Download");
+function createVideoPasteUi({ expiration, data }, name?: string) {
+  createMultiMediaPasteUi("video", expiration, data, name, "Download");
 }
 
-function createArchivePasteUi({ expiration, data, entries }) {
-  let bodyEle = document.getElementsByTagName("body")[0];
+function createArchivePasteUi({ expiration, data, entries }, name?: string) {
+  const bodyEle = document.getElementsByTagName("body")[0];
   bodyEle.textContent = '';
 
-  let mainEle = document.createElement("main");
+  const mainEle = document.createElement("main");
 
-  let sectionEle = document.createElement("section");
+  const sectionEle = document.createElement("section");
   sectionEle.classList.add("paste");
 
-  let expirationEle = document.createElement("p");
+  const expirationEle = document.createElement("p");
   expirationEle.textContent = expiration;
   expirationEle.classList.add("centered");
   sectionEle.appendChild(expirationEle);
 
-  let downloadEle = document.createElement("a");
-  downloadEle.href = URL.createObjectURL(data);
-  downloadEle.download = window.location.pathname;
+  const downloadEle = document.createElement("a");
+  downloadEle.href = getObjectUrl(data);
+  downloadEle.download = name;
   downloadEle.textContent = "Download";
   downloadEle.classList.add("hljs-meta");
   downloadEle.classList.add("centered");
@@ -187,7 +200,7 @@ function createArchivePasteUi({ expiration, data, entries }) {
 
   sectionEle.appendChild(document.createElement("hr"));
 
-  let mediaEle = document.createElement("table");
+  const mediaEle = document.createElement("table");
   mediaEle.classList.add("archive-table");
   const tr = mediaEle.insertRow();
   tr.classList.add("hljs-title");
@@ -224,30 +237,30 @@ function createArchivePasteUi({ expiration, data, entries }) {
   bodyEle.appendChild(mainEle);
 }
 
-function createMultiMediaPasteUi(tag, expiration, data, on_create?) {
-  let bodyEle = document.getElementsByTagName("body")[0];
+function createMultiMediaPasteUi(tag, expiration, data, name?: string, on_create?) {
+  const bodyEle = document.getElementsByTagName("body")[0];
   bodyEle.textContent = '';
 
-  let mainEle = document.createElement("main");
+  const mainEle = document.createElement("main");
   mainEle.classList.add("hljs");
   mainEle.classList.add("centered");
   mainEle.classList.add("fullscreen");
 
-  const downloadLink = URL.createObjectURL(data);
+  const downloadLink = getObjectUrl(data, name);
 
-  let expirationEle = document.createElement("p");
+  const expirationEle = document.createElement("p");
   expirationEle.textContent = expiration;
   mainEle.appendChild(expirationEle);
 
-  let mediaEle = document.createElement(tag);
+  const mediaEle = document.createElement(tag);
   mediaEle.src = downloadLink;
   mediaEle.controls = true;
   mainEle.appendChild(mediaEle);
 
 
-  let downloadEle = document.createElement("a");
+  const downloadEle = document.createElement("a");
   downloadEle.href = downloadLink;
-  downloadEle.download = window.location.pathname;
+  downloadEle.download = name;
   downloadEle.classList.add("hljs-meta");
   mainEle.appendChild(downloadEle);
 
@@ -261,14 +274,20 @@ function createMultiMediaPasteUi(tag, expiration, data, on_create?) {
 }
 
 function renderMessage(message) {
-  let body = document.getElementsByTagName("body")[0];
+  const body = document.getElementsByTagName("body")[0];
   body.textContent = '';
-  let mainEle = document.createElement("main");
+  const mainEle = document.createElement("main");
   mainEle.classList.add("hljs");
   mainEle.classList.add("centered");
   mainEle.classList.add("fullscreen");
   mainEle.textContent = message;
   body.appendChild(mainEle);
+}
+
+function getObjectUrl(data, mimeType?: string) {
+  return URL.createObjectURL(new Blob(data, {
+    type: mimeType,
+  }));
 }
 
 window.addEventListener("hashchange", () => location.reload());

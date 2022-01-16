@@ -52,6 +52,8 @@ pub struct ParsedUrl {
 pub struct PartialParsedUrl {
     pub decryption_key: Option<Secret<Key>>,
     pub needs_password: bool,
+    pub name: Option<String>,
+    pub language: Option<String>,
 }
 
 #[cfg(test)]
@@ -91,7 +93,7 @@ impl TryFrom<&str> for PartialParsedUrl {
 
             return Ok(Self {
                 decryption_key,
-                needs_password: false,
+                ..Self::default()
             });
         }
 
@@ -106,6 +108,8 @@ impl TryFrom<&str> for PartialParsedUrl {
 
         let mut decryption_key = None;
         let mut needs_password = false;
+        let mut name = None;
+        let mut language = None;
 
         for (key, value) in args {
             match (key, value) {
@@ -117,6 +121,8 @@ impl TryFrom<&str> for PartialParsedUrl {
                 ("pw", _) => {
                     needs_password = true;
                 }
+                ("name", Some(provided_name)) => name = Some(provided_name.to_owned()),
+                ("lang", Some(provided_lang)) => language = Some(provided_lang.to_owned()),
                 _ => (),
             }
         }
@@ -124,6 +130,8 @@ impl TryFrom<&str> for PartialParsedUrl {
         Ok(Self {
             decryption_key,
             needs_password,
+            name,
+            language,
         })
     }
 }
@@ -159,6 +167,7 @@ impl FromStr for ParsedUrl {
         let PartialParsedUrl {
             mut decryption_key,
             needs_password,
+            ..
         } = PartialParsedUrl::try_from(fragment)?;
 
         url.set_fragment(None);
@@ -338,7 +347,7 @@ mod partial_parsed_url_parsing {
             DECRYPTION_KEY_STRING.parse(),
             Ok(PartialParsedUrl {
                 decryption_key: decryption_key(),
-                needs_password: false
+                ..Default::default()
             })
         );
     }
@@ -350,7 +359,7 @@ mod partial_parsed_url_parsing {
             input.parse(),
             Ok(PartialParsedUrl {
                 decryption_key: decryption_key(),
-                needs_password: false
+                ..Default::default()
             })
         );
     }
@@ -362,7 +371,34 @@ mod partial_parsed_url_parsing {
             input.parse(),
             Ok(PartialParsedUrl {
                 decryption_key: decryption_key(),
-                needs_password: true
+                needs_password: true,
+                ..Default::default()
+            })
+        );
+    }
+
+    #[test]
+    fn with_name() {
+        let input = "key:ddLod7sGy_EjFDjWqZoH4i5n_XU8bIpEuEo3-pjfAIE=!name:test_file.rs";
+        assert_eq!(
+            input.parse(),
+            Ok(PartialParsedUrl {
+                decryption_key: decryption_key(),
+                name: Some("test_file.rs".to_owned()),
+                ..Default::default()
+            })
+        );
+    }
+
+    #[test]
+    fn with_lang() {
+        let input = "key:ddLod7sGy_EjFDjWqZoH4i5n_XU8bIpEuEo3-pjfAIE=!lang:rust";
+        assert_eq!(
+            input.parse(),
+            Ok(PartialParsedUrl {
+                decryption_key: decryption_key(),
+                language: Some("rust".to_owned()),
+                ..Default::default()
             })
         );
     }
@@ -374,7 +410,8 @@ mod partial_parsed_url_parsing {
             input.parse(),
             Ok(PartialParsedUrl {
                 decryption_key: decryption_key(),
-                needs_password: true
+                needs_password: true,
+                ..Default::default()
             })
         );
     }
@@ -386,7 +423,7 @@ mod partial_parsed_url_parsing {
             input.parse(),
             Ok(PartialParsedUrl {
                 decryption_key: decryption_key(),
-                needs_password: false
+                ..Default::default()
             })
         );
     }
