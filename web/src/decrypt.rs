@@ -111,7 +111,7 @@ pub fn decrypt(
             entries.sort_by(|a, b| a.name.cmp(&b.name));
             DecryptedData::Archive(blob, entries)
         }
-        ContentType::GzipArchive => {
+        ContentType::Gzip => {
             let mut entries = vec![];
             let cursor = Cursor::new(container);
             let gzip_dec = flate2::read::GzDecoder::new(cursor);
@@ -136,7 +136,7 @@ pub fn decrypt(
             } else {
                 DecryptedData::Blob(blob)
             }
-        },
+        }
         ContentType::Unknown => DecryptedData::Blob(blob),
     };
 
@@ -150,7 +150,7 @@ enum ContentType {
     Audio,
     Video,
     ZipArchive,
-    GzipArchive,
+    Gzip,
     Unknown,
 }
 
@@ -188,7 +188,7 @@ impl<T: AsRef<[u8]>> ContentTypeExt for T {
         } else if mime_type == "application/zip" {
             ContentType::ZipArchive
         } else if mime_type == "application/gzip" {
-            ContentType::GzipArchive
+            ContentType::Gzip
         } else {
             ContentType::Unknown
         }
@@ -221,7 +221,7 @@ mod content_type {
     test_content_type!(mp4_is_video, "movie.mp4", ContentType::Video);
     test_content_type!(mkv_is_video, "movie.mkv", ContentType::Video);
     test_content_type!(zip_is_zip, "archive.zip", ContentType::ZipArchive);
-    test_content_type!(gzip_is_gzip, "image.png.gz", ContentType::GzipArchive);
+    test_content_type!(gzip_is_gzip, "image.png.gz", ContentType::Gzip);
     test_content_type!(binary_is_unknown, "omegaupload", ContentType::Unknown);
     test_content_type!(pgp_is_text, "text.pgp", ContentType::Text);
 }
