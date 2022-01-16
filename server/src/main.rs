@@ -97,7 +97,7 @@ async fn main() -> Result<()> {
                 .route("/:code", get(|| async { INDEX_PAGE }))
                 .nest("/static", root_service)
                 .route(
-                    &format!("{}{}", API_ENDPOINT, "/:code"),
+                    &format!("{API_ENDPOINT}/:code"),
                     get(paste::<SHORT_CODE_SIZE>).delete(delete::<SHORT_CODE_SIZE>),
                 )
                 .layer(AddExtensionLayer::new(db))
@@ -163,11 +163,11 @@ fn set_up_expirations<const N: usize>(db: &Arc<DB>) {
     if corrupted == 0 {
         info!("No corrupted pastes found.");
     } else {
-        warn!("Found {} corrupted pastes.", corrupted);
+        warn!("Found {corrupted} corrupted pastes.");
     }
 
-    info!("Found {} expired pastes.", expired);
-    info!("Found {} active pastes.", pending);
+    info!("Found {expired} expired pastes.");
+    info!("Found {pending} active pastes.");
     info!("Cleanup timers have been initialized.");
 }
 
@@ -196,7 +196,7 @@ async fn upload<const N: usize>(
     if let Some(header) = maybe_expires {
         if let Expiration::UnixTime(time) = header.0 {
             if (time - Utc::now()) > *MAX_PASTE_AGE {
-                warn!("{} exceeds allowed paste lifetime", time);
+                warn!("{time} exceeds allowed paste lifetime");
                 return Err(StatusCode::BAD_REQUEST);
             }
         }
@@ -223,7 +223,7 @@ async fn upload<const N: usize>(
         .await;
         if matches!(query, Ok(false)) {
             new_key = Some(key);
-            trace!("Found new key after {} attempts.", i);
+            trace!("Found new key after {i} attempts.");
             break;
         }
     }
@@ -271,7 +271,7 @@ async fn upload<const N: usize>(
             }
         }
         e => {
-            error!("Failed to insert paste into db: {:?}", e);
+            error!("Failed to insert paste into db: {e:?}");
             return Err(StatusCode::INTERNAL_SERVER_ERROR);
         }
     }
@@ -289,7 +289,7 @@ async fn paste<const N: usize>(
     let metadata: Expiration = {
         let meta_cf = db.cf_handle(META_CF_NAME).unwrap();
         let query_result = db.get_cf(meta_cf, key).map_err(|e| {
-            error!("Failed to fetch initial query: {}", e);
+            error!("Failed to fetch initial query: {e}");
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
@@ -308,7 +308,7 @@ async fn paste<const N: usize>(
     if let Expiration::UnixTime(expires) = metadata {
         if expires < Utc::now() {
             delete_entry(db, url.as_bytes()).await.map_err(|e| {
-                error!("Failed to join handle: {}", e);
+                error!("Failed to join handle: {e}");
                 StatusCode::INTERNAL_SERVER_ERROR
             })??;
             return Err(StatusCode::NOT_FOUND);
@@ -319,7 +319,7 @@ async fn paste<const N: usize>(
         // not sure if perf of get_pinned is better than spawn_blocking
         let blob_cf = db.cf_handle(BLOB_CF_NAME).unwrap();
         let query_result = db.get_pinned_cf(blob_cf, key).map_err(|e| {
-            error!("Failed to fetch initial query: {}", e);
+            error!("Failed to fetch initial query: {e}");
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
@@ -340,7 +340,7 @@ async fn paste<const N: usize>(
         Expiration::BurnAfterReading | Expiration::BurnAfterReadingWithDeadline(_)
     ) {
         delete_entry(db, key).await.map_err(|e| {
-            error!("Failed to join handle: {}", e);
+            error!("Failed to join handle: {e}");
             StatusCode::INTERNAL_SERVER_ERROR
         })??;
     }
@@ -367,11 +367,11 @@ fn delete_entry<const N: usize>(db: Arc<DB>, key: [u8; N]) -> JoinHandle<Result<
         let blob_cf = db.cf_handle(BLOB_CF_NAME).unwrap();
         let meta_cf = db.cf_handle(META_CF_NAME).unwrap();
         if let Err(e) = db.delete_cf(blob_cf, &key) {
-            warn!("{}", e);
+            warn!("{e}");
             return Err(StatusCode::INTERNAL_SERVER_ERROR);
         }
         if let Err(e) = db.delete_cf(meta_cf, &key) {
-            warn!("{}", e);
+            warn!("{e}");
             return Err(StatusCode::INTERNAL_SERVER_ERROR);
         }
         Ok(())

@@ -113,7 +113,7 @@ fn handle_zip_archive(blob: Arc<Blob>, container: Vec<u8>) -> DecryptedData {
                         log!("Unsupported: ", s.to_string());
                     }
                     _ => {
-                        log!(format!("Error: {}", err));
+                        log!(format!("Error: {err}"));
                     }
                 },
             }

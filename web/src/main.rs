@@ -114,7 +114,7 @@ fn main() {
             Ok(partial_parsed_url) => partial_parsed_url,
             Err(e) => {
                 error!("Failed to parse text fragment; bailing.");
-                render_message(format!("Invalid paste link: {}", e).into());
+                render_message(format!("Invalid paste link: {e}").into());
                 return;
             }
         };
@@ -148,7 +148,7 @@ fn main() {
                 }
                 e => {
                     render_message("Internal error occurred.".into());
-                    error!(format!("Error occurred at pw prompt: {:?}", e));
+                    error!(format!("Error occurred at pw prompt: {e:?}"));
                     return;
                 }
             }
@@ -191,8 +191,7 @@ async fn fetch_resources(
                             "Network failure: Failed to completely read encryption paste.".into(),
                         );
                         bail!(format!(
-                            "JsFuture returned an error while fetching resp buffer: {:?}",
-                            e
+                            "JsFuture returned an error while fetching resp buffer: {e:?}",
                         ));
                     }
                 };
@@ -204,14 +203,14 @@ async fn fetch_resources(
                 return Ok(());
             }
 
-            let (decrypted, mimetype) = match decrypt(data, &key, password) {
+            let (decrypted, mimetype) = match decrypt(data, &key, password, name.as_deref()) {
                 Ok(data) => data,
                 Err(e) => {
                     let msg = match e {
                         CryptoError::Password => "The provided password was incorrect.",
                         CryptoError::SecretKey => "The secret key in the URL was incorrect.",
                         ref e => {
-                            log!(format!("Bad kdf or corrupted blob: {}", e));
+                            log!(format!("Bad kdf or corrupted blob: {e}"));
                             "An internal error occurred."
                         }
                     };
@@ -248,7 +247,7 @@ async fn fetch_resources(
             render_message(err.status_text().into());
         }
         Err(err) => {
-            render_message(format!("{}", err).into());
+            render_message(format!("{err}").into());
         }
     }
 

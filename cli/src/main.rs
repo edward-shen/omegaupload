@@ -162,14 +162,14 @@ fn handle_upload(
 
     url.set_fragment(Some(&fragment.build().expose_secret()));
 
-    println!("{}", url);
+    println!("{url}");
 
     Ok(())
 }
 
 fn handle_download(mut url: ParsedUrl) -> Result<()> {
     url.sanitized_url
-        .set_path(&format!("{}{}", API_ENDPOINT, url.sanitized_url.path()));
+        .set_path(&format!("{API_ENDPOINT}{}", url.sanitized_url.path()));
     let res = Client::new()
         .get(url.sanitized_url)
         .send()
@@ -212,7 +212,7 @@ fn handle_download(mut url: ParsedUrl) -> Result<()> {
         std::io::stdout().write_all(&data)?;
     }
 
-    eprintln!("{}", expiration_text);
+    eprintln!("{expiration_text}");
 
     Ok(())
 }
