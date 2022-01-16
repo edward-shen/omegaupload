@@ -24,7 +24,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use atty::Stream;
 use clap::Parser;
 use omegaupload_common::crypto::{open_in_place, seal_in_place};
-use omegaupload_common::secrecy::{ExposeSecret, SecretVec};
+use omegaupload_common::secrecy::{ExposeSecret, SecretString, SecretVec};
 use omegaupload_common::{
     base64, Expiration, ParsedUrl, Url, API_ENDPOINT, EXPIRATION_HEADER_NAME,
 };
@@ -32,6 +32,10 @@ use reqwest::blocking::Client;
 use reqwest::header::EXPIRES;
 use reqwest::StatusCode;
 use rpassword::prompt_password_stderr;
+
+use crate::fragment::Builder;
+
+mod fragment;
 
 #[derive(Parser)]
 struct Opts {
@@ -53,6 +57,13 @@ enum Action {
         /// The path to the file to upload. If none is provided, then reads
         /// stdin instead.
         path: Option<PathBuf>,
+        /// Hint that the uploaded file should be syntax highlighted with a
+        /// specific language.
+        #[clap(short, long)]
+        language: Option<String>,
+        /// Don't provide a file name hint.
+        #[clap(short = 'F', long)]
+        no_file_name_hint: bool,
     },
     Download {
         /// The paste to download.
@@ -69,7 +80,9 @@ fn main() -> Result<()> {
             password,
             duration,
             path,
-        } => handle_upload(url, password, duration, path),
+            language,
+            no_file_name_hint,
+        } => handle_upload(url, password, duration, path, language, no_file_name_hint),
         Action::Download { url } => handle_download(url),
     }?;
 
@@ -81,6 +94,8 @@ fn handle_upload(
     password: bool,
     duration: Option<Expiration>,
     path: Option<PathBuf>,
+    language: Option<String>,
+    no_file_name_hint: bool,
 ) -> Result<()> {
     url.set_fragment(None);
 
@@ -89,7 +104,7 @@ fn handle_upload(
     }
 
     let (data, key) = {
-        let mut container = if let Some(path) = path {
+        let mut container = if let Some(ref path) = path {
             std::fs::read(path)?
         } else {
             let mut container = vec![];
@@ -110,7 +125,7 @@ fn handle_upload(
         };
 
         let enc_key = seal_in_place(&mut container, password)?;
-        let key = base64::encode(&enc_key.expose_secret().as_ref());
+        let key = SecretString::new(base64::encode(&enc_key.expose_secret().as_ref()));
         (container, key)
     };
 
@@ -130,13 +145,22 @@ fn handle_upload(
         .map_err(|_| anyhow!("Failed to get base URL"))?
         .extend(std::iter::once(res.text()?));
 
-    let fragment = if password {
-        format!("key:{}!pw", key)
-    } else {
-        key
-    };
+    let mut fragment = Builder::new(key);
+    if password {
+        fragment = fragment.needs_password();
+    }
 
-    url.set_fragment(Some(&fragment));
+    if !no_file_name_hint {
+        if let Some(path) = path {
+            fragment = fragment.file_name(path.to_string_lossy().to_string());
+        }
+    }
+
+    if let Some(language) = language {
+        fragment = fragment.language(language);
+    }
+
+    url.set_fragment(Some(&fragment.build().expose_secret()));
 
     println!("{}", url);
 
