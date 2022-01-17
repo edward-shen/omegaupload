@@ -151,8 +151,12 @@ fn handle_upload(
     }
 
     if !no_file_name_hint {
-        if let Some(path) = path {
-            fragment = fragment.file_name(path.to_string_lossy().to_string());
+        let file_name = path.and_then(|path| {
+            path.file_name()
+                .map(|str| str.to_string_lossy().to_string())
+        });
+        if let Some(file_name) = file_name {
+            fragment = fragment.file_name(file_name);
         }
     }
 
