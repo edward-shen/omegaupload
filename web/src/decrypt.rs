@@ -159,11 +159,10 @@ fn guess_mime_type(name_hint: Option<&str>, data: &[u8]) -> &'static str {
             // support. As a result, we can probably just get the first one.
             log!("[rs] Mime type inferred from extension.");
             return mime_type;
-        } else {
-            log!("[rs] No mime type found for extension, falling back to introspection.");
         }
+        log!("[rs] No mime type found for extension, falling back to introspection.");
     }
-    tree_magic_mini::from_u8(&data)
+    tree_magic_mini::from_u8(data)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]

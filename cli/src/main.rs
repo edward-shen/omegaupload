@@ -160,7 +160,7 @@ fn handle_upload(
         fragment = fragment.language(language);
     }
 
-    url.set_fragment(Some(&fragment.build().expose_secret()));
+    url.set_fragment(Some(fragment.build().expose_secret()));
 
     println!("{url}");
 

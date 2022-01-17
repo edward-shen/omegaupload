@@ -17,16 +17,20 @@ impl Builder {
         }
     }
 
-    pub fn needs_password(mut self) -> Self {
+    pub const fn needs_password(mut self) -> Self {
         self.needs_password = true;
         self
     }
 
+    // False positive
+    #[allow(clippy::missing_const_for_fn)]
     pub fn file_name(mut self, name: String) -> Self {
         self.file_name = Some(name);
         self
     }
 
+    // False positive
+    #[allow(clippy::missing_const_for_fn)]
     pub fn language(mut self, language: String) -> Self {
         self.language = Some(language);
         self
