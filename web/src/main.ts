@@ -40,24 +40,31 @@ function loadFromDb(mimeType: string, name?: string, language?: string) {
       const data = (evt.target as IDBRequest).result;
       switch (data.type) {
         case "string":
+          console.info("[js] Rendering string UI.");
           createStringPasteUi(data, mimeType, resolvedName, language);
           break;
         case "blob":
+          console.info("[js] Rendering blob UI.");
           createBlobPasteUi(data, resolvedName);
           break;
         case "image":
-          createImagePasteUi(data, resolvedName);
+          console.info("[js] Rendering image UI.");
+          createImagePasteUi(data, resolvedName, mimeType);
           break;
         case "audio":
-          createAudioPasteUi(data, resolvedName);
+          console.info("[js] Rendering audio UI.");
+          createAudioPasteUi(data, resolvedName, mimeType);
           break;
         case "video":
-          createVideoPasteUi(data, resolvedName);
+          console.info("[js] Rendering video UI.");
+          createVideoPasteUi(data, resolvedName, mimeType);
           break;
         case "archive":
+          console.info("[js] Rendering archive UI.");
           createArchivePasteUi(data, resolvedName);
           break;
         default:
+          console.info("[js] Rendering unknown UI.");
           renderMessage("Something went wrong. Try clearing local data.");
           break;
       }
@@ -202,8 +209,8 @@ function createBlobPasteUi(data, name: string) {
   bodyEle.appendChild(mainEle);
 }
 
-function createImagePasteUi({ expiration, data, file_size }, name: string) {
-  createMultiMediaPasteUi("img", expiration, data, name, (downloadEle, imgEle) => {
+function createImagePasteUi({ expiration, data, file_size }, name: string, mimeType: string) {
+  createMultiMediaPasteUi("img", expiration, data, name, mimeType, (downloadEle, imgEle) => {
     imgEle.onload = () => {
       const width = imgEle.naturalWidth || imgEle.width;
       const height = imgEle.naturalHeight || imgEle.height;
@@ -212,12 +219,12 @@ function createImagePasteUi({ expiration, data, file_size }, name: string) {
   });
 }
 
-function createAudioPasteUi({ expiration, data }, name: string) {
-  createMultiMediaPasteUi("audio", expiration, data, name, "Download");
+function createAudioPasteUi({ expiration, data }, name: string, mimeType: string) {
+  createMultiMediaPasteUi("audio", expiration, data, name, mimeType, "Download");
 }
 
-function createVideoPasteUi({ expiration, data }, name: string) {
-  createMultiMediaPasteUi("video", expiration, data, name, "Download");
+function createVideoPasteUi({ expiration, data }, name: string, mimeType: string) {
+  createMultiMediaPasteUi("video", expiration, data, name, mimeType, "Download");
 }
 
 function createArchivePasteUi({ expiration, data, entries }, name: string) {
@@ -281,7 +288,7 @@ function createArchivePasteUi({ expiration, data, entries }, name: string) {
   bodyEle.appendChild(mainEle);
 }
 
-function createMultiMediaPasteUi(tag, expiration, data, name: string, on_create?: Function | string) {
+function createMultiMediaPasteUi(tag, expiration, data, name: string, mimeType: string, on_create?: Function | string) {
   const bodyEle = document.getElementsByTagName("body")[0];
   bodyEle.textContent = '';
 
@@ -290,7 +297,7 @@ function createMultiMediaPasteUi(tag, expiration, data, name: string, on_create?
   mainEle.classList.add("centered");
   mainEle.classList.add("fullscreen");
 
-  const downloadLink = getObjectUrl(data, name);
+  const downloadLink = getObjectUrl(data, mimeType);
 
   const expirationEle = document.createElement("p");
   expirationEle.textContent = expiration;
@@ -329,9 +336,7 @@ function renderMessage(message) {
 }
 
 function getObjectUrl(data, mimeType?: string) {
-  return URL.createObjectURL(new Blob(data, {
-    type: mimeType,
-  }));
+  return URL.createObjectURL(new Blob([data], { type: mimeType }));
 }
 
 window.addEventListener("hashchange", () => location.reload());
