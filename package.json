@@ -15,5 +15,9 @@
   "dependencies": {
     "highlight.js": "^11.4.0",
     "highlightjs-line-numbers.js": "^2.8.0"
+  },
+  "scripts": {
+    "build": "webpack --mode production",
+    "clean": "(git rev-parse --show-toplevel && rm -rf node_modules dist web/pkg)"
   }
 }

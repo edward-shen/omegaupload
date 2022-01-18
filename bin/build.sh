@@ -20,20 +20,16 @@ set -euxo pipefail
 
 cd "$(git rev-parse --show-toplevel)" || exit 1
 
-# Build frontend assets
-yarn
-
+# Clean resources
 rm -rf dist
-yarn webpack
+
+# Build frontend code
+yarn
+yarn build
+mv dist/static/index.html dist
 
 # Build server
 cargo build --release --bin omegaupload-server
-
-# Prepare assets for upload to webserver
-mkdir -p dist/static
-# Move everything that's not index.html into a `static` subdir
-find dist -not -name index.html -type f -exec mv {} dist/static/ ";"
-
 strip target/release/omegaupload-server
 cp target/release/omegaupload-server dist/omegaupload-server
 

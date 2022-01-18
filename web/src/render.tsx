@@ -17,7 +17,7 @@
 import './main.scss';
 
 const hljs = require('highlight.js');
-window.hljs = hljs;
+(window as any).hljs = hljs;
 require('highlightjs-line-numbers.js');
 
 function loadFromDb(mimeType: string, name?: string, language?: string) {
