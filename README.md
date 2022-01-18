@@ -33,7 +33,6 @@ $ omegaupload download https://paste.example.com/PgRG8Hfrr9rR#I1FG2oejo2gSjB3Ym1
 
 Prerequisites:
 - `yarn` 1.22.17 or later (Earlier versions untested but likely to work)
-- [`trunk`](https://trunkrs.dev/)
 - Cargo, with support for the latest Rust version
 - _(Optional)_ zstd, for zipping up the file for distribution
 
@@ -45,9 +44,9 @@ on port `8080`.
 
 ### Development
 
-For development, building is as simple as `cargo build`. Note that you may need
-to run `trunk build` first before building the server. To run the server (even
-for testing) requires uploading `dist.tar.zst` to a remote server.
+For development, building is as simple as `cargo build` or `yarn build`. To run
+the server (even for testing) requires uploading `dist.tar.zst` to a remote
+server.
 
 ## Why OmegaUpload?
 
