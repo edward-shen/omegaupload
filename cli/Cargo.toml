@@ -1,6 +1,6 @@
 [package]
 name = "omegaupload"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "OmegaUpload CLI tool"
 repository = "https://git.eddie.sh/edward/omegaupload"
