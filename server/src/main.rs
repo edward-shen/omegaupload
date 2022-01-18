@@ -22,12 +22,12 @@ use std::time::Duration;
 
 use anyhow::Result;
 use axum::body::Bytes;
-use axum::error_handling::HandleErrorExt;
+use axum::error_handling::HandleError;
 use axum::extract::{Extension, Path, TypedHeader};
 use axum::http::header::EXPIRES;
 use axum::http::StatusCode;
 use axum::response::Html;
-use axum::routing::{get, post, service_method_routing};
+use axum::routing::{get, get_service, post};
 use axum::{AddExtensionLayer, Router};
 use chrono::Utc;
 use futures::stream::StreamExt;
@@ -83,8 +83,9 @@ async fn main() -> Result<()> {
     let signals_handle = signals.handle();
     let signals_task = tokio::spawn(handle_signals(signals, Arc::clone(&db)));
 
-    let root_service = service_method_routing::get(ServeDir::new("static"))
-        .handle_error(|_| Ok::<_, Infallible>(StatusCode::NOT_FOUND));
+    let root_service = HandleError::new(get_service(ServeDir::new("static")), |_| async {
+        Ok::<_, Infallible>(StatusCode::NOT_FOUND)
+    });
 
     axum::Server::bind(&"0.0.0.0:8080".parse()?)
         .serve({
