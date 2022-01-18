@@ -26,7 +26,6 @@ use axum::error_handling::HandleError;
 use axum::extract::{Extension, Path, TypedHeader};
 use axum::http::header::EXPIRES;
 use axum::http::StatusCode;
-use axum::response::Html;
 use axum::routing::{get, get_service, post};
 use axum::{AddExtensionLayer, Router};
 use chrono::Utc;
@@ -41,7 +40,7 @@ use rocksdb::{Options, DB};
 use signal_hook::consts::SIGUSR1;
 use signal_hook_tokio::Signals;
 use tokio::task::{self, JoinHandle};
-use tower_http::services::ServeDir;
+use tower_http::services::{ServeDir, ServeFile};
 use tracing::{error, instrument, trace};
 use tracing::{info, warn};
 
@@ -58,7 +57,6 @@ lazy_static! {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    const INDEX_PAGE: Html<&'static str> = Html(include_str!("../../dist/index.html"));
     const PASTE_DB_PATH: &str = "database";
     const SHORT_CODE_SIZE: usize = 12;
 
@@ -87,15 +85,19 @@ async fn main() -> Result<()> {
         Ok::<_, Infallible>(StatusCode::NOT_FOUND)
     });
 
+    let index_service = HandleError::new(get_service(ServeFile::new("index.html")), |_| async {
+        Ok::<_, Infallible>(StatusCode::NOT_FOUND)
+    });
+
     axum::Server::bind(&"0.0.0.0:8080".parse()?)
         .serve({
             info!("Now serving on 0.0.0.0:8080");
             Router::new()
                 .route(
                     "/",
-                    post(upload::<SHORT_CODE_SIZE>).get(|| async { INDEX_PAGE }),
+                    post(upload::<SHORT_CODE_SIZE>).get_service(index_service.clone()),
                 )
-                .route("/:code", get(|| async { INDEX_PAGE }))
+                .route("/:code", index_service)
                 .nest("/static", root_service)
                 .route(
                     &format!("{API_ENDPOINT}/:code"),

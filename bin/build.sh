@@ -22,10 +22,9 @@ cd "$(git rev-parse --show-toplevel)" || exit 1
 
 # Build frontend assets
 yarn
-trunk build --release
 
-sed -i 's#/index#/static/index#g' dist/index.html
-sed -i 's#stylesheet" href="/main#stylesheet" href="/static/main#g' dist/index.html
+rm -rf dist
+yarn webpack
 
 # Build server
 cargo build --release --bin omegaupload-server

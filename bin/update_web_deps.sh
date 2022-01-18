@@ -19,17 +19,9 @@
 set -euxo pipefail
 
 CUR_DIR=$(pwd)
-
 PROJECT_TOP_LEVEL=$(git rev-parse --show-toplevel)
 
 cd "$PROJECT_TOP_LEVEL" || exit 1
 git submodule foreach git pull
-
-HLJS_PATH=$(git submodule status | cut -d ' ' -f3 | grep highlight.js)
-
-cd "$HLJS_PATH"
-npm ci # install without updating package-lock.josn
-node tools/build
-mv build/highlight.min.js "$PROJECT_TOP_LEVEL"/"$HLJS_PATH"/..
 
 cd "$CUR_DIR"

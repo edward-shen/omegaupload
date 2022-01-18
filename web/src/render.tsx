@@ -14,7 +14,12 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-// Exported to main.rs
+import './main.scss';
+
+const hljs = require('highlight.js');
+window.hljs = hljs;
+require('highlightjs-line-numbers.js');
+
 function loadFromDb(mimeType: string, name?: string, language?: string) {
   let resolvedName;
   if (name) {
@@ -167,7 +172,9 @@ function createStringPasteUi(data, mimeType: string, name: string, lang?: string
   }
 
   hljs.highlightAll();
-  hljs.initLineNumbersOnLoad();
+
+
+  (hljs as any).initLineNumbersOnLoad();
 }
 
 function createBlobPasteUi(data, name: string) {
@@ -340,3 +347,5 @@ function getObjectUrl(data, mimeType?: string) {
 }
 
 window.addEventListener("hashchange", () => location.reload());
+
+export { renderMessage, loadFromDb };

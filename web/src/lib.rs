@@ -44,7 +44,7 @@ mod util;
 
 const DOWNLOAD_SIZE_LIMIT: u128 = n_mib_bytes!(500);
 
-#[wasm_bindgen]
+#[wasm_bindgen(raw_module = "../src/render")]
 extern "C" {
     #[wasm_bindgen(js_name = loadFromDb)]
     pub fn load_from_db(mime_type: JsString, name: Option<JsString>, language: Option<JsString>);
@@ -69,7 +69,8 @@ fn open_idb() -> Result<IdbOpenDbRequest> {
         .map_err(|_| anyhow!("Failed to open idb"))
 }
 
-fn main() {
+#[wasm_bindgen]
+pub fn start() {
     std::panic::set_hook(Box::new(console_error_panic_hook::hook));
 
     if location().pathname().unwrap() == "/" {

@@ -1,6 +1,19 @@
 {
   "devDependencies": {
     "@swc/cli": "^0.1.51",
-    "@swc/core": "^1.2.102"
+    "@swc/core": "^1.2.102",
+    "@wasm-tool/wasm-pack-plugin": "^1.6.0",
+    "css-loader": "^6.5.1",
+    "html-webpack-plugin": "^5.5.0",
+    "sass": "^1.48.0",
+    "sass-loader": "^12.4.0",
+    "style-loader": "^3.3.1",
+    "swc-loader": "^0.1.15",
+    "webpack": "^5.66.0",
+    "webpack-cli": "^4.9.1"
+  },
+  "dependencies": {
+    "highlight.js": "^11.4.0",
+    "highlightjs-line-numbers.js": "^2.8.0"
   }
 }

@@ -14,13 +14,13 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-@use '../vendor/highlight.js/src/styles/github-dark.css';
+@use 'node_modules/highlight.js/styles/github-dark.css';
 
 $padding: 1em;
 
 @font-face {
   font-family: "Mplus Code";
-  src: url("./MPLUSCodeLatin[wdth,wght].ttf") format("truetype");
+  src: url("../vendor/MPLUS_FONTS/fonts/ttf/MPLUSCodeLatin[wdth,wght].ttf") format("truetype");
 }
 
 body {
