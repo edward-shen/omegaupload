@@ -9,7 +9,7 @@ license = "GPL-3.0-or-later"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-omegaupload-common = "0.1"
+omegaupload-common = "0.2"
 
 anyhow = "1"
 atty = "0.2"

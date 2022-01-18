@@ -295,9 +295,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "3.0.7"
+version = "3.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12e8611f9ae4e068fa3e56931fded356ff745e70987ff76924a6e0ab1c8ef2e3"
+checksum = "8c506244a13c87262f84bf16369740d0b7c3850901b6a642aa41b031a710c473"
 dependencies = [
  "atty",
  "bitflags",
@@ -945,30 +945,9 @@ dependencies = [
  "anyhow",
  "atty",
  "clap",
- "omegaupload-common 0.1.0",
+ "omegaupload-common 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "reqwest",
  "rpassword",
-]
-
-[[package]]
-name = "omegaupload-common"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c36a9c19b1b84731bf3f90c646f168d54e1ef7b7ca91c2a8b2d39fa61ac2d95f"
-dependencies = [
- "argon2",
- "base64",
- "bytes",
- "chacha20poly1305",
- "chrono",
- "headers",
- "lazy_static",
- "rand",
- "secrecy",
- "serde",
- "thiserror",
- "typenum",
- "url",
 ]
 
 [[package]]
@@ -991,6 +970,27 @@ dependencies = [
  "typenum",
  "url",
  "web-sys",
+]
+
+[[package]]
+name = "omegaupload-common"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b0e6112dcb442b5d280f65cf14b9d6749f3585709d1ed2f1b8821f12c3b6c16"
+dependencies = [
+ "argon2",
+ "base64",
+ "bytes",
+ "chacha20poly1305",
+ "chrono",
+ "headers",
+ "lazy_static",
+ "rand",
+ "secrecy",
+ "serde",
+ "thiserror",
+ "typenum",
+ "url",
 ]
 
 [[package]]
@@ -1435,12 +1435,12 @@ dependencies = [
 
 [[package]]
 name = "serde_urlencoded"
-version = "0.7.0"
+version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "edfa57a7f8d9c1d260a549e7224100f6c43d43f9103e06dd8b4095a9b2b43ce9"
+checksum = "d3491c14715ca2294c4d6a88f15e84739788c1d030eed8c110436aafdaa2f3fd"
 dependencies = [
  "form_urlencoded",
- "itoa 0.4.8",
+ "itoa 1.0.1",
  "ryu",
  "serde",
 ]

@@ -45,6 +45,7 @@ struct Opts {
 
 #[derive(Parser)]
 enum Action {
+    /// Upload a paste to an omegaupload server.
     Upload {
         /// The OmegaUpload instance to upload data to.
         url: Url,
@@ -52,7 +53,8 @@ enum Action {
         /// public access.
         #[clap(short, long)]
         password: bool,
-        #[clap(short, long)]
+        /// How long for the paste to last, or until someone has read it.
+        #[clap(short, long, possible_values = Expiration::variants())]
         duration: Option<Expiration>,
         /// The path to the file to upload. If none is provided, then reads
         /// stdin instead.
@@ -65,6 +67,7 @@ enum Action {
         #[clap(short = 'F', long)]
         no_file_name_hint: bool,
     },
+    /// Download a paste from an omegaupload server.
     Download {
         /// The paste to download.
         url: ParsedUrl,
