@@ -189,21 +189,41 @@ pub enum Expiration {
     UnixTime(DateTime<Utc>),
 }
 
-// This impl is used for the CLI
-impl FromStr for Expiration {
-    type Err = String;
+// This impl is used for the CLI. We use a macro here to ensure that possible
+// expressed by the CLI are the same supported by the server.
+macro_rules! expiration_from_str {
+    {
+        $($str_repr:literal => $duration:expr),* $(,)?
+    } => {
+        impl FromStr for Expiration {
+            type Err = String;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "read" => Ok(Self::BurnAfterReading),
-            "5m" => Ok(Self::UnixTime(Utc::now() + Duration::minutes(5))),
-            "10m" => Ok(Self::UnixTime(Utc::now() + Duration::minutes(10))),
-            "1h" => Ok(Self::UnixTime(Utc::now() + Duration::hours(1))),
-            "1d" => Ok(Self::UnixTime(Utc::now() + Duration::days(1))),
-            // We disallow permanent pastes
-            _ => Err(s.to_owned()),
+            fn from_str(s: &str) -> Result<Self, Self::Err> {
+                match s {
+                    $($str_repr => Ok($duration),)*
+                    _ => Err(s.to_owned()),
+                }
+            }
         }
-    }
+
+        impl Expiration {
+            pub fn variants() -> &'static [&'static str] {
+                &[
+                    $($str_repr,)*
+                ]
+            }
+        }
+    };
+}
+
+expiration_from_str! {
+    "read" => Self::BurnAfterReading,
+    "5m" => Self::UnixTime(Utc::now() + Duration::minutes(5)),
+    "10m" => Self::UnixTime(Utc::now() + Duration::minutes(10)),
+    "1h" => Self::UnixTime(Utc::now() + Duration::hours(1)),
+    "1d" => Self::UnixTime(Utc::now() + Duration::days(1)),
+    "3d" => Self::UnixTime(Utc::now() + Duration::days(1)),
+    "1w" => Self::UnixTime(Utc::now() + Duration::weeks(1)),
 }
 
 impl Display for Expiration {
