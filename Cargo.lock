@@ -945,31 +945,9 @@ dependencies = [
  "anyhow",
  "atty",
  "clap",
- "omegaupload-common 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "omegaupload-common 0.1.0",
  "reqwest",
  "rpassword",
-]
-
-[[package]]
-name = "omegaupload-common"
-version = "0.1.0"
-dependencies = [
- "argon2",
- "base64",
- "bytes",
- "chacha20poly1305",
- "chrono",
- "gloo-console",
- "headers",
- "http",
- "lazy_static",
- "rand",
- "secrecy",
- "serde",
- "thiserror",
- "typenum",
- "url",
- "web-sys",
 ]
 
 [[package]]
@@ -994,6 +972,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "omegaupload-common"
+version = "0.2.0"
+dependencies = [
+ "argon2",
+ "base64",
+ "bytes",
+ "chacha20poly1305",
+ "chrono",
+ "gloo-console",
+ "headers",
+ "http",
+ "lazy_static",
+ "rand",
+ "secrecy",
+ "serde",
+ "thiserror",
+ "typenum",
+ "url",
+ "web-sys",
+]
+
+[[package]]
 name = "omegaupload-server"
 version = "0.1.0"
 dependencies = [
@@ -1005,7 +1005,7 @@ dependencies = [
  "futures",
  "headers",
  "lazy_static",
- "omegaupload-common 0.1.0",
+ "omegaupload-common 0.2.0",
  "rand",
  "rocksdb",
  "serde",
@@ -1031,7 +1031,7 @@ dependencies = [
  "http",
  "js-sys",
  "mime_guess",
- "omegaupload-common 0.1.0",
+ "omegaupload-common 0.2.0",
  "reqwasm",
  "serde",
  "tar",
