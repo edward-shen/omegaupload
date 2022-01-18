@@ -1,7 +1,8 @@
 {
   "jsc": {
     "parser": {
-      "syntax": "typescript"
+      "syntax": "typescript",
+      "tsx": true
     },
     "target": "es2021"
   }

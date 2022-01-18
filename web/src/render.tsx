@@ -15,6 +15,8 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import './main.scss';
+import ReactDom from 'react-dom';
+import React from 'react';
 
 const hljs = require('highlight.js');
 (window as any).hljs = hljs;
@@ -96,36 +98,20 @@ function loadFromDb(mimeType: string, name?: string, language?: string) {
 }
 
 function createStringPasteUi(data, mimeType: string, name: string, lang?: string) {
-  const bodyEle = document.getElementsByTagName("body")[0];
-  bodyEle.textContent = '';
+  const html = <main>
+    <pre className='paste'>
+      <p className='unselectable centered'>{data.expiration}</p>
+      <a href={getObjectUrl([data.data], mimeType)} download={name} className='hljs-meta centered'>
+        Download file.
+      </a>
+      <hr />
+      <code>
+        {data.data}
+      </code>
+    </pre>
+  </main>;
 
-  const mainEle = document.createElement("main");
-  const preEle = document.createElement("pre");
-  preEle.classList.add("paste");
-
-  const headerEle = document.createElement("p");
-  headerEle.classList.add("unselectable");
-  headerEle.classList.add("centered");
-  headerEle.textContent = data.expiration;
-  preEle.appendChild(headerEle);
-
-  const downloadEle = document.createElement("a");
-  downloadEle.href = getObjectUrl([data.data], mimeType);
-  downloadEle.download = name;
-
-  downloadEle.classList.add("hljs-meta");
-  downloadEle.classList.add("centered");
-  downloadEle.textContent = "Download file.";
-  preEle.appendChild(downloadEle);
-
-  preEle.appendChild(document.createElement("hr"));
-
-  const codeEle = document.createElement("code");
-  codeEle.textContent = data.data;
-  preEle.appendChild(codeEle);
-
-  mainEle.appendChild(preEle);
-  bodyEle.appendChild(mainEle);
+  ReactDom.render(html, document.body);
 
   let languages = undefined;
 
@@ -178,42 +164,22 @@ function createStringPasteUi(data, mimeType: string, name: string, lang?: string
 }
 
 function createBlobPasteUi(data, name: string) {
-  const bodyEle = document.getElementsByTagName("body")[0];
-  bodyEle.textContent = '';
+  const html = <main className='hljs centered fullscreen'>
+    <div className='centered'>
+      <p>{data.expiration}</p>
+      <a href={getObjectUrl(data.data, name)} download={name} className='hljs-meta'>
+        Download binary file.
+      </a>
+    </div>
+    <p className='display-anyways hljs-comment' onClick={() => {
+      data.data.text().then(text => {
+        data.data = text;
+        createStringPasteUi(data, "application/octet-stream", name);
+      })
+    }}>Display anyways?</p>
+  </main>;
 
-  const mainEle = document.createElement("main");
-  mainEle.classList.add("hljs");
-  mainEle.classList.add("centered");
-  mainEle.classList.add("fullscreen");
-
-  const divEle = document.createElement("div");
-  divEle.classList.add("centered");
-
-  const expirationEle = document.createElement("p");
-  expirationEle.textContent = data.expiration;
-  divEle.appendChild(expirationEle);
-
-  const downloadEle = document.createElement("a");
-  downloadEle.href = getObjectUrl(data.data, name);
-  downloadEle.download = name;
-  downloadEle.classList.add("hljs-meta");
-  downloadEle.textContent = "Download binary file.";
-  divEle.appendChild(downloadEle);
-
-  mainEle.appendChild(divEle);
-
-  const displayAnywayEle = document.createElement("p");
-  displayAnywayEle.classList.add("display-anyways");
-  displayAnywayEle.classList.add("hljs-comment");
-  displayAnywayEle.textContent = "Display anyways?";
-  displayAnywayEle.onclick = () => {
-    data.data.text().then(text => {
-      data.data = text;
-      createStringPasteUi(data, "application/octet-stream", name);
-    })
-  };
-  mainEle.appendChild(displayAnywayEle);
-  bodyEle.appendChild(mainEle);
+  ReactDom.render(html, document.body);
 }
 
 function createImagePasteUi({ expiration, data, file_size }, name: string, mimeType: string) {
@@ -235,39 +201,6 @@ function createVideoPasteUi({ expiration, data }, name: string, mimeType: string
 }
 
 function createArchivePasteUi({ expiration, data, entries }, name: string) {
-  const bodyEle = document.getElementsByTagName("body")[0];
-  bodyEle.textContent = '';
-
-  const mainEle = document.createElement("main");
-
-  const sectionEle = document.createElement("section");
-  sectionEle.classList.add("paste");
-
-  const expirationEle = document.createElement("p");
-  expirationEle.textContent = expiration;
-  expirationEle.classList.add("centered");
-  sectionEle.appendChild(expirationEle);
-
-  const downloadEle = document.createElement("a");
-  downloadEle.href = getObjectUrl(data);
-  downloadEle.download = name;
-  downloadEle.textContent = "Download";
-  downloadEle.classList.add("hljs-meta");
-  downloadEle.classList.add("centered");
-  sectionEle.appendChild(downloadEle);
-
-  sectionEle.appendChild(document.createElement("hr"));
-
-  const mediaEle = document.createElement("table");
-  mediaEle.classList.add("archive-table");
-  const tr = mediaEle.insertRow();
-  tr.classList.add("hljs-title");
-  const tdName = tr.insertCell();
-  tdName.textContent = "Name";
-  const tdSize = tr.insertCell();
-  tdSize.classList.add("align-right");
-  tdSize.textContent = "File Size";
-
   // Because it's a stable sort, we can first sort by name (to get all folder
   // items grouped together) and then sort by if there's a / or not.
   entries.sort((a, b) => {
@@ -280,23 +213,32 @@ function createArchivePasteUi({ expiration, data, entries }, name: string) {
     return b.name.includes("/") - a.name.includes("/");
   });
 
-  for (const { name, file_size } of entries) {
-    const tr = mediaEle.insertRow();
-    const tdName = tr.insertCell();
-    tdName.textContent = name;
-    const tdSize = tr.insertCell();
-    tdSize.textContent = file_size;
-    tdSize.classList.add("align-right");
-    tdSize.classList.add("hljs-number");
-  }
+  const html = <main>
+    <section className='paste'>
+      <p className='centered'>{expiration}</p>
+      <a href={getObjectUrl(data)} download={name} className='hljs-meta centered'>Download</a>
+      <hr />
+      <table className='archive-table'>
+        <thead>
+          <tr className='hljs-title'><th>Name</th><th className='align-right'>File Size</th></tr>
+        </thead>
+        <tbody>
+          {
+            entries.map(({ name, file_size }) => {
+              return <tr><td>{name}</td><td className='align-right hljs-number'>{file_size}</td></tr>;
+            })
+          }
+        </tbody>
+      </table>
+    </section>
+  </main>;
 
-  sectionEle.appendChild(mediaEle);
-  mainEle.appendChild(sectionEle);
-  bodyEle.appendChild(mainEle);
+  ReactDom.render(html, document.body);
+
 }
 
 function createMultiMediaPasteUi(tag, expiration, data, name: string, mimeType: string, on_create?: Function | string) {
-  const bodyEle = document.getElementsByTagName("body")[0];
+  const bodyEle = document.body;
   bodyEle.textContent = '';
 
   const mainEle = document.createElement("main");
@@ -315,7 +257,6 @@ function createMultiMediaPasteUi(tag, expiration, data, name: string, mimeType: 
   mediaEle.controls = true;
   mainEle.appendChild(mediaEle);
 
-
   const downloadEle = document.createElement("a");
   downloadEle.href = downloadLink;
   downloadEle.download = name;
@@ -332,14 +273,12 @@ function createMultiMediaPasteUi(tag, expiration, data, name: string, mimeType: 
 }
 
 function renderMessage(message) {
-  const body = document.getElementsByTagName("body")[0];
-  body.textContent = '';
-  const mainEle = document.createElement("main");
-  mainEle.classList.add("hljs");
-  mainEle.classList.add("centered");
-  mainEle.classList.add("fullscreen");
-  mainEle.textContent = message;
-  body.appendChild(mainEle);
+  ReactDom.render(
+    <main className='hljs centered fullscreen'>
+      {message}
+    </main>,
+    document.body,
+  );
 }
 
 function getObjectUrl(data, mimeType?: string) {

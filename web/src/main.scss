@@ -43,6 +43,10 @@ main {
   justify-content: center;
 }
 
+th {
+  font-weight: normal;
+}
+
 .paste {
   @extend .hljs;
   border-radius: $padding;
