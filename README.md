@@ -29,7 +29,7 @@ $ omegaupload download https://paste.example.com/PgRG8Hfrr9rR#I1FG2oejo2gSjB3Ym1
   XChaCha20Poly1305 for encryption and Argon2id for KDF.
 - Customizable expiration times, from burn-after-read to 1 day.
 
-## Getting Started
+## Building from source
 
 Prerequisites:
 - `yarn` 1.22.17 or later (Earlier versions untested but likely to work)
@@ -42,11 +42,17 @@ Then, run `./bin/build.sh` for a `dist.tar.zst` to be generated, where you can
 simply extract that folder and run the binary provided. The server will listen
 on port `8080`.
 
-### Development
+### Running a local server
 
-For development, building is as simple as `cargo build` or `yarn build`. To run
-the server (even for testing) requires uploading `dist.tar.zst` to a remote
-server.
+After running `./bin/build.sh`, you can cd into the `dist` and run
+`./omegaupload-server`. It will run on port 8000, and will respond to HTTP
+requests.
+
+You can then point an omegaupload CLI instance (or run
+`cargo run --bin omegaupload`) as an upload server.
+
+If you're only changing the frontend (and not updating the server code), you can
+run `yarn build` for faster iteration.
 
 ## Why OmegaUpload?
 
