@@ -207,7 +207,8 @@ macro_rules! expiration_from_str {
         }
 
         impl Expiration {
-            pub fn variants() -> &'static [&'static str] {
+            #[must_use]
+            pub const fn variants() -> &'static [&'static str] {
                 &[
                     $($str_repr,)*
                 ]

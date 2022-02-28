@@ -20,11 +20,11 @@ headers = "*"
 lazy_static = "1"
 # Disable `random()` and `thread_rng()`
 rand = { version = "0.8", default_features = false }
-rocksdb = { version = "0.17", default_features = false, features = ["zstd"] }
+rocksdb = { version = "0.18", default_features = false, features = ["zstd"] }
 serde = { version = "1", features = ["derive"] }
 signal-hook = "0.3"
 signal-hook-tokio = { version = "0.3", features = ["futures-v0_3"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
-tower-http = { version = "0.1", features = ["fs"] }
+tower-http = { version = "0.2", features = ["fs"] }
 tracing = { version = "0.1" }
-tracing-subscriber = "0.2"
+tracing-subscriber = "0.3"

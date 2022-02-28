@@ -70,6 +70,7 @@ fn open_idb() -> Result<IdbOpenDbRequest> {
 }
 
 #[wasm_bindgen]
+#[allow(clippy::missing_panics_doc)]
 pub fn start() {
     std::panic::set_hook(Box::new(console_error_panic_hook::hook));
 
