@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 omegaupload-common = { path = "../common" }
 anyhow = "1.0.58"
-axum = { version = "0.5.11", features = ["http2", "headers"] }
+axum = { version = "0.5.12", features = ["http2", "headers"] }
 bincode = "1.3.3"
 # We don't care about which version (We want to match with axum), we just need
 # to enable the feature
