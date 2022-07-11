@@ -294,3 +294,43 @@ fn get_argon2() -> Argon2<'static> {
 pub fn get_csrng() -> impl CryptoRng + Rng {
     rand::thread_rng()
 }
+
+#[cfg(test)]
+mod test {
+    use super::open_in_place;
+    use super::seal_in_place;
+    use crate::crypto::SecretVec;
+
+    macro_rules! test_encryption {
+        ($($name:ident, $content:expr, $password:expr),*) => {
+            $(
+                #[test]
+                fn $name() {
+                    let mut m = $content;
+                    let n: Vec<u8> = $content;
+                    let key = seal_in_place(&mut m, $password).unwrap();
+                    assert_ne!(m, n);
+                    assert!(open_in_place(&mut m, &key, $password).is_ok());
+                    assert_eq!(m, n);
+                }
+            )*
+        };
+    }
+
+    test_encryption!(empty, vec![], None);
+    test_encryption!(
+        empty_password,
+        vec![],
+        Some(SecretVec::from(b"password".to_vec()))
+    );
+    test_encryption!(
+        normal,
+        vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+        None
+    );
+    test_encryption!(
+        normal_password,
+        vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+        Some(SecretVec::from(b"password".to_vec()))
+    );
+}
