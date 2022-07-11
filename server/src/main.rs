@@ -27,7 +27,7 @@ use axum::extract::{Extension, Path, TypedHeader};
 use axum::http::header::EXPIRES;
 use axum::http::StatusCode;
 use axum::routing::{get, get_service, post};
-use axum::{AddExtensionLayer, Router};
+use axum::Router;
 use chrono::Utc;
 use futures::stream::StreamExt;
 use headers::HeaderMap;
@@ -103,7 +103,7 @@ async fn main() -> Result<()> {
                     &format!("{API_ENDPOINT}/:code"),
                     get(paste::<SHORT_CODE_SIZE>).delete(delete::<SHORT_CODE_SIZE>),
                 )
-                .layer(AddExtensionLayer::new(db))
+                .layer(axum::Extension(db))
                 .into_make_service()
         })
         .await?;
