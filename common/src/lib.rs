@@ -1,4 +1,6 @@
 #![warn(clippy::nursery, clippy::pedantic)]
+// False positive: https://github.com/rust-lang/rust-clippy/issues/6902
+#![allow(clippy::use_self)]
 
 //! Contains common functions and structures used by multiple projects
 
@@ -230,10 +232,10 @@ expiration_from_str! {
 impl Display for Expiration {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Expiration::BurnAfterReading | Expiration::BurnAfterReadingWithDeadline(_) => {
+            Self::BurnAfterReading | Self::BurnAfterReadingWithDeadline(_) => {
                 write!(f, "This item has been burned. You now have the only copy.")
             }
-            Expiration::UnixTime(time) => write!(
+            Self::UnixTime(time) => write!(
                 f,
                 "{}",
                 time.format("This item will expire on %A, %B %-d, %Y at %T %Z.")
@@ -248,7 +250,7 @@ lazy_static! {
 
 impl Header for Expiration {
     fn name() -> &'static HeaderName {
-        &*EXPIRATION_HEADER_NAME
+        &EXPIRATION_HEADER_NAME
     }
 
     fn decode<'i, I>(values: &mut I) -> Result<Self, headers::Error>
@@ -282,6 +284,8 @@ impl From<&Expiration> for HeaderValue {
 }
 
 impl From<Expiration> for HeaderValue {
+    // False positive: https://github.com/rust-lang/rust-clippy/issues/9095
+    #[allow(clippy::needless_borrow)]
     fn from(expiration: Expiration) -> Self {
         (&expiration).into()
     }
@@ -290,14 +294,12 @@ impl From<Expiration> for HeaderValue {
 pub struct ParseHeaderValueError;
 
 #[cfg(feature = "wasm")]
-impl TryFrom<web_sys::Headers> for Expiration {
+impl TryFrom<reqwasm::http::Headers> for Expiration {
     type Error = ParseHeaderValueError;
 
-    fn try_from(headers: web_sys::Headers) -> Result<Self, Self::Error> {
+    fn try_from(headers: reqwasm::http::Headers) -> Result<Self, Self::Error> {
         headers
             .get(http::header::EXPIRES.as_str())
-            .ok()
-            .flatten()
             .as_deref()
             .and_then(|v| Self::try_from(v).ok())
             .ok_or(ParseHeaderValueError)
