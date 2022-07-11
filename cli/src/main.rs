@@ -31,7 +31,7 @@ use omegaupload_common::{
 use reqwest::blocking::Client;
 use reqwest::header::EXPIRES;
 use reqwest::StatusCode;
-use rpassword::prompt_password_stderr;
+use rpassword::prompt_password;
 
 use crate::fragment::Builder;
 
@@ -120,8 +120,7 @@ fn handle_upload(
         }
 
         let password = if password {
-            let maybe_password =
-                prompt_password_stderr("Please set the password for this paste: ")?;
+            let maybe_password = prompt_password("Please set the password for this paste: ")?;
             Some(SecretVec::new(maybe_password.into_bytes()))
         } else {
             None
@@ -200,8 +199,7 @@ fn handle_download(mut url: ParsedUrl) -> Result<()> {
 
     let password = if url.needs_password {
         // Only print prompt on interactive, else it messes with output
-        let maybe_password =
-            prompt_password_stderr("Please enter the password to access this paste: ")?;
+        let maybe_password = prompt_password("Please enter the password to access this paste: ")?;
         Some(SecretVec::new(maybe_password.into_bytes()))
     } else {
         None
