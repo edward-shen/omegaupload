@@ -22,6 +22,6 @@ CUR_DIR=$(pwd)
 PROJECT_TOP_LEVEL=$(git rev-parse --show-toplevel)
 
 cd "$PROJECT_TOP_LEVEL" || exit 1
-git submodule foreach git pull
+git submodule update --remote
 
 cd "$CUR_DIR"
