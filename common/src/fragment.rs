@@ -1,4 +1,4 @@
-use omegaupload_common::secrecy::{ExposeSecret, SecretString};
+use crate::secrecy::{ExposeSecret, SecretString};
 
 pub struct Builder {
     decryption_key: SecretString,

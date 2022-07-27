@@ -35,24 +35,13 @@ checksum = "bb07d2053ccdbe10e2af2995a2f116c1330396493dc1269f6a91d0ae82e19704"
 
 [[package]]
 name = "argon2"
-version = "0.3.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25df3c03f1040d0069fcd3907e24e36d59f9b6fa07ba49be0eb25a794f036ba7"
-dependencies = [
- "base64ct",
- "blake2",
- "password-hash 0.3.2",
-]
-
-[[package]]
-name = "argon2"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "db4ce4441f99dbd377ca8a8f57b698c44d0d6e712d8329b5040da5a64aa1ce73"
 dependencies = [
  "base64ct",
  "blake2",
- "password-hash 0.4.2",
+ "password-hash",
 ]
 
 [[package]]
@@ -998,7 +987,7 @@ dependencies = [
  "anyhow",
  "atty",
  "clap",
- "omegaupload-common 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "omegaupload-common",
  "reqwest",
  "rpassword",
 ]
@@ -1007,7 +996,7 @@ dependencies = [
 name = "omegaupload-common"
 version = "0.2.0"
 dependencies = [
- "argon2 0.4.1",
+ "argon2",
  "base64",
  "bytes",
  "chacha20poly1305",
@@ -1018,27 +1007,6 @@ dependencies = [
  "lazy_static",
  "rand",
  "reqwasm",
- "secrecy",
- "serde",
- "thiserror",
- "typenum",
- "url",
-]
-
-[[package]]
-name = "omegaupload-common"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7b0e6112dcb442b5d280f65cf14b9d6749f3585709d1ed2f1b8821f12c3b6c16"
-dependencies = [
- "argon2 0.3.4",
- "base64",
- "bytes",
- "chacha20poly1305",
- "chrono",
- "headers",
- "lazy_static",
- "rand",
  "secrecy",
  "serde",
  "thiserror",
@@ -1058,7 +1026,7 @@ dependencies = [
  "futures",
  "headers",
  "lazy_static",
- "omegaupload-common 0.2.0",
+ "omegaupload-common",
  "rand",
  "rocksdb",
  "serde",
@@ -1084,7 +1052,7 @@ dependencies = [
  "http",
  "js-sys",
  "mime_guess",
- "omegaupload-common 0.2.0",
+ "omegaupload-common",
  "reqwasm",
  "serde",
  "tar",
@@ -1112,17 +1080,6 @@ name = "os_str_bytes"
 version = "6.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "21326818e99cfe6ce1e524c2a805c189a99b5ae555a35d19f9a284b427d86afa"
-
-[[package]]
-name = "password-hash"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1d791538a6dcc1e7cb7fe6f6b58aca40e7f79403c45b2bc274008b5e647af1d8"
-dependencies = [
- "base64ct",
- "rand_core",
- "subtle",
-]
 
 [[package]]
 name = "password-hash"

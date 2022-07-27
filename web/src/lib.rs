@@ -26,8 +26,11 @@ use http::uri::PathAndQuery;
 use http::{StatusCode, Uri};
 use js_sys::{Array, JsString, Object, Uint8Array};
 use omegaupload_common::crypto::{Error as CryptoError, Key};
-use omegaupload_common::secrecy::{Secret, SecretVec};
-use omegaupload_common::{Expiration, PartialParsedUrl};
+use omegaupload_common::fragment::Builder;
+use omegaupload_common::base64;
+use omegaupload_common::crypto::seal_in_place;
+use omegaupload_common::secrecy::{Secret, SecretVec, SecretString, ExposeSecret};
+use omegaupload_common::{Expiration, PartialParsedUrl, Url};
 use reqwasm::http::Request;
 use wasm_bindgen::prelude::{wasm_bindgen, Closure};
 use wasm_bindgen::{JsCast, JsValue};
@@ -50,6 +53,8 @@ extern "C" {
     pub fn load_from_db(mime_type: JsString, name: Option<JsString>, language: Option<JsString>);
     #[wasm_bindgen(js_name = renderMessage)]
     pub fn render_message(message: JsString);
+    #[wasm_bindgen(js_name = createUploadUi)]
+    pub fn create_upload_ui();
 }
 
 fn window() -> Window {
@@ -75,7 +80,7 @@ pub fn start() {
     std::panic::set_hook(Box::new(console_error_panic_hook::hook));
 
     if location().pathname().unwrap() == "/" {
-        render_message("Go away".into());
+        create_upload_ui();
         return;
     }
 
@@ -164,6 +169,39 @@ pub fn start() {
             log!(e.to_string());
         }
     });
+}
+
+#[wasm_bindgen]
+#[allow(clippy::future_not_send)]
+#[allow(clippy::missing_panics_doc)]
+pub fn encrypt_string(data: String) {
+    spawn_local(async move {
+        if let Err(e) = do_encrypt(data.into_bytes()).await {
+            log!(e.to_string());
+        }
+    });
+}
+
+#[allow(clippy::future_not_send)]
+async fn do_encrypt(mut data: Vec<u8>) -> Result<()> {
+    let (data, key) = {
+        let enc_key = seal_in_place(&mut data, None)?;
+        let key = SecretString::new(base64::encode(&enc_key.expose_secret().as_ref()));
+        (data, key)
+    };
+
+    let s: String = location().to_string().into();
+    let mut url = Url::from_str(&s)?;
+    let fragment = Builder::new(key);
+
+    let js_data = Uint8Array::new_with_length(data.len() as u32);
+    js_data.copy_from(&data);
+
+    let short_code = Request::post(url.as_ref()).body(js_data).send().await?.text().await?;
+    url.set_path(&short_code);
+    url.set_fragment(Some(fragment.build().expose_secret()));
+    location().set_href(url.as_ref()).expect("Unable to navigate to encrypted upload");
+    Ok(())
 }
 
 #[allow(clippy::future_not_send)]

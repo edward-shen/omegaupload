@@ -17,10 +17,55 @@
 import './main.scss';
 import ReactDom from 'react-dom';
 import React from 'react';
+import { encrypt_string } from '../pkg';
 
 const hljs = require('highlight.js');
 (window as any).hljs = hljs;
 require('highlightjs-line-numbers.js');
+
+class PasteForm extends React.Component {
+  constructor(props) {
+    super(props)
+    this.state = {
+      value: "Sample text"
+    };
+    this.handleChange = this.handleChange.bind(this);
+    this.handleSubmit = this.handleSubmit.bind(this);
+  }
+
+  handleChange(event) {
+    this.setState({value: event.target.value});
+  }
+
+  handleSubmit(event) {
+    try {
+      encrypt_string(this.state.value);
+    } catch (e) {
+      console.error(e);
+    }
+
+    event.preventDefault();
+  }
+
+  render() {
+    return (
+      <pre className='paste'>
+        <form class="hljs centered" onSubmit={this.handleSubmit}>
+          <textarea value={this.state.value} onChange={this.handleChange} />
+          <input type="submit" value="submit" />
+        </form>
+      </pre>
+    );
+  }
+}
+
+function createUploadUi() {
+  const html = <main className='hljs centered fullscreen'>
+    <PasteForm />
+  </main>;
+
+  ReactDom.render(html, document.body);
+}
 
 function loadFromDb(mimeType: string, name?: string, language?: string) {
   let resolvedName;
@@ -287,4 +332,4 @@ function getObjectUrl(data, mimeType?: string) {
 
 window.addEventListener("hashchange", () => location.reload());
 
-export { renderMessage, loadFromDb };
+export { renderMessage, createUploadUi, loadFromDb };
