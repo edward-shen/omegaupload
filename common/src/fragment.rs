@@ -8,6 +8,7 @@ pub struct Builder {
 }
 
 impl Builder {
+    #[must_use]
     pub fn new(decryption_key: SecretString) -> Self {
         Self {
             decryption_key,
@@ -17,6 +18,7 @@ impl Builder {
         }
     }
 
+    #[must_use]
     pub const fn needs_password(mut self) -> Self {
         self.needs_password = true;
         self
@@ -24,6 +26,7 @@ impl Builder {
 
     // False positive
     #[allow(clippy::missing_const_for_fn)]
+    #[must_use]
     pub fn file_name(mut self, name: String) -> Self {
         self.file_name = Some(name);
         self
@@ -31,11 +34,13 @@ impl Builder {
 
     // False positive
     #[allow(clippy::missing_const_for_fn)]
+    #[must_use]
     pub fn language(mut self, language: String) -> Self {
         self.language = Some(language);
         self
     }
 
+    #[must_use]
     pub fn build(self) -> SecretString {
         if !self.needs_password && self.file_name.is_none() && self.language.is_none() {
             return self.decryption_key;

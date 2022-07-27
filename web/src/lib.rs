@@ -25,11 +25,11 @@ use gloo_console::{error, log};
 use http::uri::PathAndQuery;
 use http::{StatusCode, Uri};
 use js_sys::{Array, JsString, Object, Uint8Array};
-use omegaupload_common::crypto::{Error as CryptoError, Key};
-use omegaupload_common::fragment::Builder;
 use omegaupload_common::base64;
 use omegaupload_common::crypto::seal_in_place;
-use omegaupload_common::secrecy::{Secret, SecretVec, SecretString, ExposeSecret};
+use omegaupload_common::crypto::{Error as CryptoError, Key};
+use omegaupload_common::fragment::Builder;
+use omegaupload_common::secrecy::{ExposeSecret, Secret, SecretString, SecretVec};
 use omegaupload_common::{Expiration, PartialParsedUrl, Url};
 use reqwasm::http::Request;
 use wasm_bindgen::prelude::{wasm_bindgen, Closure};
@@ -194,13 +194,20 @@ async fn do_encrypt(mut data: Vec<u8>) -> Result<()> {
     let mut url = Url::from_str(&s)?;
     let fragment = Builder::new(key);
 
-    let js_data = Uint8Array::new_with_length(data.len() as u32);
+    let js_data = Uint8Array::new_with_length(u32::try_from(data.len()).expect("Data too large"));
     js_data.copy_from(&data);
 
-    let short_code = Request::post(url.as_ref()).body(js_data).send().await?.text().await?;
+    let short_code = Request::post(url.as_ref())
+        .body(js_data)
+        .send()
+        .await?
+        .text()
+        .await?;
     url.set_path(&short_code);
     url.set_fragment(Some(fragment.build().expose_secret()));
-    location().set_href(url.as_ref()).expect("Unable to navigate to encrypted upload");
+    location()
+        .set_href(url.as_ref())
+        .expect("Unable to navigate to encrypted upload");
     Ok(())
 }
 

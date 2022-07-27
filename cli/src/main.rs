@@ -24,8 +24,8 @@ use anyhow::{anyhow, bail, Context, Result};
 use atty::Stream;
 use clap::Parser;
 use omegaupload_common::crypto::{open_in_place, seal_in_place};
-use omegaupload_common::secrecy::{ExposeSecret, SecretString, SecretVec};
 use omegaupload_common::fragment::Builder;
+use omegaupload_common::secrecy::{ExposeSecret, SecretString, SecretVec};
 use omegaupload_common::{
     base64, Expiration, ParsedUrl, Url, API_ENDPOINT, EXPIRATION_HEADER_NAME,
 };
