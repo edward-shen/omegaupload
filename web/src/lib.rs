@@ -173,11 +173,20 @@ pub fn start() {
 
 #[wasm_bindgen]
 #[allow(clippy::future_not_send)]
-#[allow(clippy::missing_panics_doc)]
 pub fn encrypt_string(data: String) {
     spawn_local(async move {
         if let Err(e) = do_encrypt(data.into_bytes()).await {
             log!(format!("[rs] Error encrypting string: {}", e));
+        }
+    });
+}
+
+#[wasm_bindgen]
+#[allow(clippy::future_not_send)]
+pub fn encrypt_array_buffer(data: Vec<u8>) {
+    spawn_local(async move {
+        if let Err(e) = do_encrypt(data).await {
+            log!(format!("[rs] Error encrypting array buffer: {}", e));
         }
     });
 }

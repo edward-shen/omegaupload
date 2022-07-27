@@ -17,11 +17,30 @@
 import './main.scss';
 import ReactDom from 'react-dom';
 import React, { useState } from 'react';
-import { encrypt_string } from '../pkg';
+import { encrypt_string, encrypt_array_buffer } from '../pkg';
 
 import hljs from 'highlight.js'
 (window as any).hljs = hljs;
 require('highlightjs-line-numbers.js');
+
+const FileForm = () => {
+  const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const fr = new FileReader();
+    fr.onload = (e) => {
+      const { result } = e.target;
+      if (result instanceof ArrayBuffer) {
+        console.log("File uploaded");
+        let data = new Uint8Array(result);
+        encrypt_array_buffer(data);
+      }
+    }
+    fr.readAsArrayBuffer((event.target as HTMLInputElement).files[0]);
+  }
+
+  return (
+    <input type="file" onChange={handleChange} />
+  )
+}
 
 const PasteForm = () => {
   const [value, setValue] = useState("");
@@ -47,6 +66,7 @@ const PasteForm = () => {
 
 function createUploadUi() {
   const html = <main className='hljs centered fullscreen'>
+    <FileForm />
     <PasteForm />
   </main>;
 
@@ -54,7 +74,7 @@ function createUploadUi() {
 }
 
 function loadFromDb(mimeType: string, name?: string, language?: string) {
-  let resolvedName;
+  let resolvedName: string;
   if (name) {
     resolvedName = name;
   } else {
