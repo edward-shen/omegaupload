@@ -29,7 +29,6 @@ const FileForm = () => {
     fr.onload = (e) => {
       const { result } = e.target;
       if (result instanceof ArrayBuffer) {
-        console.log("File uploaded");
         let data = new Uint8Array(result);
         encrypt_array_buffer(data);
       }
