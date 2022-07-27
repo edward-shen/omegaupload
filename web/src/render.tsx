@@ -35,6 +35,7 @@ const PasteForm = () => {
     <pre className='paste'>
       <form className='hljs centered' onSubmit={handleSubmit}>
         <textarea
+          placeholder="Sample text"
           value={value}
           onChange={(e) => setValue(e.target.value)}
         />
