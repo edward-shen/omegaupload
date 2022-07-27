@@ -177,7 +177,7 @@ pub fn start() {
 pub fn encrypt_string(data: String) {
     spawn_local(async move {
         if let Err(e) = do_encrypt(data.into_bytes()).await {
-            log!(e.to_string());
+            log!(format!("[rs] Error encrypting string: {}", e));
         }
     });
 }
