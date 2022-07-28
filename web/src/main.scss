@@ -29,7 +29,7 @@ body {
 }
 
 .unselectable {
-    user-select: none;
+  user-select: none;
 }
 
 hr {
@@ -88,7 +88,9 @@ th {
   cursor: pointer;
 }
 
-img, audio, video {
+img,
+audio,
+video {
   border-radius: $padding;
   margin-bottom: $padding;
   max-height: 75vh;
@@ -96,11 +98,9 @@ img, audio, video {
 }
 
 textarea {
-  width: 100%;
-  height: 100%;
-  min-width: 75vw;
-  min-height: 75vh;
-  box-sizing: border-box;
+  @extend .paste;
+  height: 75vh;
+  border-color: white;
 }
 
 .primary {
@@ -116,4 +116,30 @@ textarea {
     @extend .align-right;
     padding-left: $padding;
   }
+}
+
+.button {
+  @extend .hljs;
+
+  border: 1px solid white;
+  border-radius: $padding;
+  padding: $padding;
+  margin: $padding;
+  font-size: 16px;
+
+  &:hover {
+    cursor: pointer;
+  }
+}
+
+.file-upload {
+  @extend .button;
+
+  input {
+    display: none;
+  }
+}
+
+.text-upload {
+  @extend .button;
 }

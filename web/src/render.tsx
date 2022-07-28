@@ -34,9 +34,12 @@ const FileForm = () => {
     fr.readAsArrayBuffer(file);
   }
 
-  return (
-    <input type="file" onChange={handleChange} />
-  )
+  return <>
+    <label className="file-upload" >
+      Select a file
+      <input type="file" onChange={handleChange} />
+    </label>
+  </>
 }
 
 const PasteForm = () => {
@@ -48,22 +51,21 @@ const PasteForm = () => {
   }
 
   return (
-    <pre className='paste'>
-      <form className='hljs centered' onSubmit={handleSubmit}>
-        <textarea
-          placeholder="Sample text"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-        />
-        <input type="submit" value="submit" />
-      </form>
-    </pre>
+    <form className='hljs centered' onSubmit={handleSubmit}>
+      <textarea
+        placeholder="Sample text"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+      />
+      <input className="text-upload" type="submit" value="submit" />
+    </form>
   )
 }
 
 function createUploadUi() {
   const html = <main className='hljs centered fullscreen'>
     <FileForm />
+    <p>or paste your data below</p>
     <PasteForm />
   </main>;
 
