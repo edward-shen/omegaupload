@@ -25,15 +25,13 @@ require('highlightjs-line-numbers.js');
 
 const FileForm = () => {
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    let file = event.target.files![0];
     const fr = new FileReader();
-    fr.onload = (e) => {
-      const { result } = e.target;
-      if (result instanceof ArrayBuffer) {
-        let data = new Uint8Array(result);
-        encrypt_array_buffer(data);
-      }
+    fr.onload = (_e) => {
+      let data = new Uint8Array(fr.result as ArrayBuffer);
+      encrypt_array_buffer(data);
     }
-    fr.readAsArrayBuffer((event.target as HTMLInputElement).files[0]);
+    fr.readAsArrayBuffer(file);
   }
 
   return (
