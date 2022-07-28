@@ -41,6 +41,7 @@ use crate::crypto::Key;
 
 pub mod base64;
 pub mod crypto;
+pub mod fragment;
 
 pub const API_ENDPOINT: &str = "/api";
 

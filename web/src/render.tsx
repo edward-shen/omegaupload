@@ -16,14 +16,64 @@
 
 import './main.scss';
 import ReactDom from 'react-dom';
-import React from 'react';
+import React, { useState } from 'react';
+import { encrypt_string, encrypt_array_buffer } from '../pkg';
 
-const hljs = require('highlight.js');
+import hljs from 'highlight.js'
 (window as any).hljs = hljs;
 require('highlightjs-line-numbers.js');
 
+const FileForm = () => {
+  const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const fr = new FileReader();
+    fr.onload = (e) => {
+      const { result } = e.target;
+      if (result instanceof ArrayBuffer) {
+        let data = new Uint8Array(result);
+        encrypt_array_buffer(data);
+      }
+    }
+    fr.readAsArrayBuffer((event.target as HTMLInputElement).files[0]);
+  }
+
+  return (
+    <input type="file" onChange={handleChange} />
+  )
+}
+
+const PasteForm = () => {
+  const [value, setValue] = useState("");
+
+  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    encrypt_string(value);
+  }
+
+  return (
+    <pre className='paste'>
+      <form className='hljs centered' onSubmit={handleSubmit}>
+        <textarea
+          placeholder="Sample text"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+        />
+        <input type="submit" value="submit" />
+      </form>
+    </pre>
+  )
+}
+
+function createUploadUi() {
+  const html = <main className='hljs centered fullscreen'>
+    <FileForm />
+    <PasteForm />
+  </main>;
+
+  ReactDom.render(html, document.body);
+}
+
 function loadFromDb(mimeType: string, name?: string, language?: string) {
-  let resolvedName;
+  let resolvedName: string;
   if (name) {
     resolvedName = name;
   } else {
@@ -287,4 +337,4 @@ function getObjectUrl(data, mimeType?: string) {
 
 window.addEventListener("hashchange", () => location.reload());
 
-export { renderMessage, loadFromDb };
+export { renderMessage, createUploadUi, loadFromDb };

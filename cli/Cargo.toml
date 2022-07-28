@@ -9,10 +9,9 @@ license = "GPL-3.0-or-later"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-omegaupload-common = "0.2.0"
-
+omegaupload-common = { path = "../common" }
 anyhow = "1.0.58"
 atty = "0.2.14"
-clap = { version = "3.2.8", features = ["derive"] }
+clap = { version = "3.2.15", features = ["derive"] }
 reqwest = { version = "0.11.11", default-features = false, features = ["rustls-tls", "blocking"] }
-rpassword = "6.0.1"
+rpassword = "7.0.0"

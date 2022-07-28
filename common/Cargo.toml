@@ -10,14 +10,14 @@ license = "MIT"
 
 [dependencies]
 base64 = "0.13.0"
-bytes = { version = "1.1.0", features = ["serde"] }
+bytes = { version = "1.2.0", features = ["serde"] }
 chacha20poly1305 = { version = "0.9.1", features = ["stream", "std"] }
 chrono = { version = "0.4.19", features = ["serde"] }
 headers = "0.3.7"
 lazy_static = "1.4.0"
 rand = "0.8.5"
 secrecy = "0.8.0"
-serde = { version = "1.0.138", features = ["derive"] }
+serde = { version = "1.0.140", features = ["derive"] }
 thiserror = "1.0.31"
 typenum = "1.15.0"
 url = "2.2.2"

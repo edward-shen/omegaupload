@@ -113,5 +113,4 @@ There are a few reasons to not use OmegaUpload:
  - Cannot download files larger than 512 MiB through the web frontend&mdash;this
    is a technical limitation of the current web frontend not using a web worker
    in addition to the fact that browsers are not optimized for XChaCha20.
- - Right now, you must upload via the CLI tool.
  - The frontend uses WASM, which is a novel attack surface.

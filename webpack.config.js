@@ -2,6 +2,7 @@ const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const webpack = require('webpack');
 const WasmPackPlugin = require("@wasm-tool/wasm-pack-plugin");
+const { SourceMapDevToolPlugin } = require('webpack');
 
 module.exports = {
   entry: './web/src/index.js',
@@ -21,6 +22,8 @@ module.exports = {
           "css-loader",
           // Compiles Sass to CSS
           "sass-loader",
+          // source map for debugging
+          "source-map-loader"
         ],
       },
     ],
@@ -41,6 +44,7 @@ module.exports = {
       crateDirectory: path.resolve(__dirname, "web"),
       outDir: path.resolve(__dirname, "web/pkg"),
     }),
+    new SourceMapDevToolPlugin({}),
   ],
   experiments: {
     asyncWebAssembly: true,
