@@ -47,7 +47,9 @@ const PasteForm = () => {
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    encrypt_string(value);
+    if (value.trim() !== "") {
+      encrypt_string(value);
+    }
   }
 
   return (
