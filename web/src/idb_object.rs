@@ -16,6 +16,7 @@
 
 use std::{hint::unreachable_unchecked, marker::PhantomData};
 
+use gloo_console::log;
 use js_sys::{Array, JsString, Object};
 use wasm_bindgen::JsValue;
 
@@ -37,7 +38,10 @@ impl From<IdbObject<Ready>> for Object {
             Ok(o) => o,
             // SAFETY: IdbObject maintains the invariant that it can eventually
             // be constructed into a JS object.
-            _ => unsafe { unreachable_unchecked() },
+            _ => {
+                log!("IdbObject invariant violated?!");
+                unsafe { unreachable_unchecked() }
+            }
         }
     }
 }

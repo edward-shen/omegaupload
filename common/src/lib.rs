@@ -294,18 +294,18 @@ impl From<Expiration> for HeaderValue {
 
 pub struct ParseHeaderValueError;
 
-#[cfg(feature = "wasm")]
-impl TryFrom<reqwasm::http::Headers> for Expiration {
-    type Error = ParseHeaderValueError;
+// #[cfg(feature = "wasm")]
+// impl TryFrom<reqwest::header::HeaderMap<&str>> for Expiration {
+//     type Error = ParseHeaderValueError;
 
-    fn try_from(headers: reqwasm::http::Headers) -> Result<Self, Self::Error> {
-        headers
-            .get(http::header::EXPIRES.as_str())
-            .as_deref()
-            .and_then(|v| Self::try_from(v).ok())
-            .ok_or(ParseHeaderValueError)
-    }
-}
+//     fn try_from(headers: reqwest::header::HeaderMap) -> Result<Self, Self::Error> {
+//         headers
+//             .get(http::header::EXPIRES.as_str())
+//             .as_deref()
+//             .and_then(|v| Self::try_from(v).ok())
+//             .ok_or(ParseHeaderValueError)
+//     }
+// }
 
 impl TryFrom<HeaderValue> for Expiration {
     type Error = ParseHeaderValueError;

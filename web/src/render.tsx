@@ -14,28 +14,29 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import './main.scss';
 import ReactDom from 'react-dom';
 import React, { useState } from 'react';
-import { encrypt_string, encrypt_array_buffer } from '../pkg';
 
-import hljs from 'highlight.js'
-(window as any).hljs = hljs;
-require('highlightjs-line-numbers.js');
+let hljs;
+if (typeof WorkerGlobalScope === 'undefined' || !(self instanceof WorkerGlobalScope)) {
+  hljs = require('highlight.js');
+  (window as any).hljs = hljs;
+  require('highlightjs-line-numbers.js');
+}
+
 
 const FileForm = () => {
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     let file = event.target.files![0];
     const fr = new FileReader();
     fr.onload = (_e) => {
-      let data = new Uint8Array(fr.result as ArrayBuffer);
-      encrypt_array_buffer(data);
+      encryptMessage(new Uint8Array(fr.result as ArrayBuffer));
     }
     fr.readAsArrayBuffer(file);
   }
 
   return <>
-    <label className="file-upload" >
+    <label className="file-upload hljs-meta" >
       Select a file
       <input type="file" onChange={handleChange} />
     </label>
@@ -43,12 +44,14 @@ const FileForm = () => {
 }
 
 const PasteForm = () => {
-  const [value, setValue] = useState("");
+  const [data, setValue] = useState("");
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (value.trim() !== "") {
-      encrypt_string(value);
+    if (data.trim() !== "") {
+      encryptMessage(new TextEncoder().encode(data));
+    } else {
+      console.log("[js] Not sending string because it was empty.");
     }
   }
 
@@ -56,12 +59,26 @@ const PasteForm = () => {
     <form className='hljs centered' onSubmit={handleSubmit}>
       <textarea
         placeholder="すいちゃんは～ 今日もかわい～！！"
-        value={value}
+        value={data}
         onChange={(e) => setValue(e.target.value)}
       />
-      <input className="text-upload" type="submit" value="submit" />
+      <input className="text-upload hljs-meta" type="submit" value="Submit" />
     </form>
   )
+}
+
+function encryptMessage(data: Uint8Array) {
+  const worker = new Worker(new URL('./bg_encrypt.ts', import.meta.url));
+  worker.onmessage = (event: MessageEvent<string>) => {
+    console.log(event);
+    if (event.data === 'init') {
+      console.log("[js] Sending data to worker");
+      const message = { data, location: window.location.toString() };
+      worker.postMessage(message, [message.data.buffer]);
+    } else {
+      window.location.assign(event.data);
+    }
+  }
 }
 
 function createUploadUi() {
@@ -149,7 +166,7 @@ function loadFromDb(mimeType: string, name?: string, language?: string) {
   };
 }
 
-function createStringPasteUi(data, mimeType: string, name: string, lang?: string) {
+function createStringPasteUi(data, mimeType: string, name: string, lang?: string, skipSyntaxHighlight?: boolean) {
   const html = <main>
     <pre className='paste'>
       <p className='unselectable centered'>{data.expiration}</p>
@@ -164,6 +181,10 @@ function createStringPasteUi(data, mimeType: string, name: string, lang?: string
   </main>;
 
   ReactDom.render(html, document.body);
+
+  if (skipSyntaxHighlight) {
+    return;
+  }
 
   let languages = undefined;
 
@@ -203,6 +224,7 @@ function createStringPasteUi(data, mimeType: string, name: string, lang?: string
   }
 
   // If we still haven't set languages here, then we're leaving it up to the
+  // library
   if (!languages) {
     console.log("[js] Deferring to hljs inference for syntax highlighting.");
   } else {
@@ -226,7 +248,7 @@ function createBlobPasteUi(data, name: string) {
     <p className='display-anyways hljs-comment' onClick={() => {
       data.data.text().then(text => {
         data.data = text;
-        createStringPasteUi(data, "application/octet-stream", name);
+        createStringPasteUi(data, "application/octet-stream", name, undefined, true);
       })
     }}>Display anyways?</p>
   </main>;
@@ -337,6 +359,5 @@ function getObjectUrl(data, mimeType?: string) {
   return URL.createObjectURL(new Blob([data], { type: mimeType }));
 }
 
-window.addEventListener("hashchange", () => location.reload());
 
 export { renderMessage, createUploadUi, loadFromDb };

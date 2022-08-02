@@ -19,7 +19,6 @@ gloo-console = "0.2.1"
 http = "0.2.8"
 js-sys = "0.3.59"
 mime_guess = "2.0.4"
-reqwasm = "0.5.0"
 tree_magic_mini = { version = "3.0.3", features = ["with-gpl-data"] }
 serde = { version = "1.0.140", features = ["derive"] }
 wasm-bindgen = { version = "0.2.82", features = ["serde-serialize"] }
@@ -27,6 +26,7 @@ wasm-bindgen-futures = "0.4.32"
 zip = { version = "0.6.2", default-features = false, features = ["deflate"] }
 flate2 = "1.0.24"
 tar = "0.4.38"
+reqwest = "0.11"
 
 [dependencies.web-sys]
 version = "0.3.59"

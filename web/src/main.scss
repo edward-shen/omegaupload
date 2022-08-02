@@ -40,6 +40,7 @@ hr {
 main {
   display: inline-flex;
   min-width: 100%;
+  max-width: 100%;
   justify-content: center;
 }
 
@@ -121,11 +122,9 @@ textarea {
 .button {
   @extend .hljs;
 
-  border: 1px solid white;
-  border-radius: $padding;
-  padding: $padding;
-  margin: $padding;
   font-size: 16px;
+  text-decoration: underline;
+  border: none;
 
   &:hover {
     cursor: pointer;
