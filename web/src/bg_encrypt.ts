@@ -25,7 +25,7 @@ addEventListener('message', (event: MessageEvent<BgData>) => {
   let { location, data } = event.data;
   console.log('[js-worker] Sending data to rust in a worker thread...');
   encrypt_array_buffer(location, data).then(url => {
-    console.log("done buffer");
+    console.log("[js-worker] Encryption done.");
     postMessage(url);
   }).catch(e => console.error(e));
 })
