@@ -17,19 +17,21 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-use std::io::{Read, Write};
+use std::io::{Cursor, Read, Write};
 use std::path::PathBuf;
 
 use anyhow::{anyhow, bail, Context, Result};
 use atty::Stream;
+use bytes::Bytes;
 use clap::Parser;
+use indicatif::{ProgressBar, ProgressStyle};
 use omegaupload_common::crypto::{open_in_place, seal_in_place};
 use omegaupload_common::fragment::Builder;
 use omegaupload_common::secrecy::{ExposeSecret, SecretString, SecretVec};
 use omegaupload_common::{
     base64, Expiration, ParsedUrl, Url, API_ENDPOINT, EXPIRATION_HEADER_NAME,
 };
-use reqwest::blocking::Client;
+use reqwest::blocking::{Body, Client};
 use reqwest::header::EXPIRES;
 use reqwest::StatusCode;
 use rpassword::prompt_password;
@@ -128,13 +130,35 @@ fn handle_upload(
         (container, key)
     };
 
-    let mut res = Client::new().post(url.as_ref());
+    let mut req = Client::new().post(url.as_ref());
 
     if let Some(duration) = duration {
-        res = res.header(&*EXPIRATION_HEADER_NAME, duration);
+        req = req.header(&*EXPIRATION_HEADER_NAME, duration);
     }
 
-    let res = res.body(data).send().context("Request to server failed")?;
+    let data_size = data.len() as u64;
+    let progress_style = ProgressStyle::with_template(
+        "[{elapsed_precise}] {bar:40} {bytes}/{total_bytes} {eta_precise}",
+    )
+    .unwrap();
+    let progress_bar = ProgressBar::new(data_size).with_style(progress_style);
+    let res = req
+        .body(Body::sized(
+            WrappedBody::new(
+                move |amt| {
+                    progress_bar.inc(amt as u64);
+                },
+                data,
+            ),
+            data_size,
+        ))
+        .build()
+        .expect("Failed to build body");
+    let res = reqwest::blocking::ClientBuilder::new()
+        .timeout(None)
+        .build()?
+        .execute(res)
+        .context("Request to server failed")?;
 
     if res.status() != StatusCode::OK {
         bail!("Upload failed. Got HTTP error {}", res.status());
@@ -168,6 +192,30 @@ fn handle_upload(
     println!("{url}");
 
     Ok(())
+}
+
+struct WrappedBody<Callback> {
+    callback: Callback,
+    inner: Cursor<Bytes>,
+}
+
+impl<Callback> WrappedBody<Callback> {
+    fn new(callback: Callback, data: Vec<u8>) -> Self {
+        Self {
+            callback,
+            inner: Cursor::new(Bytes::from(data)),
+        }
+    }
+}
+
+impl<Callback: FnMut(usize)> Read for WrappedBody<Callback> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let res = self.inner.read(buf);
+        if let Ok(size) = res {
+            (self.callback)(size);
+        }
+        res
+    }
 }
 
 fn handle_download(mut url: ParsedUrl) -> Result<()> {
