@@ -23,12 +23,13 @@ use std::ops::{Deref, DerefMut};
 use argon2::{Argon2, ParamsBuilder};
 use chacha20poly1305::aead::generic_array::sequence::GenericSequence;
 use chacha20poly1305::aead::generic_array::GenericArray;
-use chacha20poly1305::aead::{AeadInPlace, NewAead};
+use chacha20poly1305::aead::{AeadInPlace};
 use chacha20poly1305::XChaCha20Poly1305;
 use chacha20poly1305::XNonce;
 use rand::{CryptoRng, Rng};
 use secrecy::{DebugSecret, ExposeSecret, Secret, SecretVec, Zeroize};
 use typenum::Unsigned;
+use chacha20poly1305::KeyInit;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -277,12 +278,9 @@ fn get_argon2() -> Argon2<'static> {
     let mut params = ParamsBuilder::new();
     params
         .m_cost(15 * 1024) // 15 MiB
-        .expect("Hard coded params to work")
         .t_cost(2)
-        .expect("Hard coded params to work")
-        .p_cost(2)
-        .expect("Hard coded params to work");
-    let params = params.params().expect("Hard coded params to work");
+        .p_cost(2);
+    let params = params.build().expect("Hard coded params to work");
     Argon2::new(argon2::Algorithm::Argon2id, argon2::Version::V0x13, params)
 }
 

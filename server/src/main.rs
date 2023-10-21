@@ -97,8 +97,8 @@ async fn main() -> Result<()> {
                     "/",
                     post(upload::<SHORT_CODE_SIZE>).get_service(index_service.clone()),
                 )
-                .route("/:code", index_service)
-                .nest("/static", root_service)
+                .route_service("/:code", index_service)
+                .nest_service("/static", root_service)
                 .route(
                     &format!("{API_ENDPOINT}/:code"),
                     get(paste::<SHORT_CODE_SIZE>).delete(delete::<SHORT_CODE_SIZE>),
@@ -129,7 +129,8 @@ fn set_up_expirations<const N: usize>(db: &Arc<DB>) {
 
     let db_ref = Arc::clone(db);
 
-    for (key, value) in db.iterator_cf(meta_cf, IteratorMode::Start) {
+    for item in db.iterator_cf(meta_cf, IteratorMode::Start) {
+        let (key, value) = item.unwrap();
         let key: [u8; N] = (*key).try_into().unwrap();
 
         let expiration = if let Ok(value) = bincode::deserialize::<Expiration>(&value) {

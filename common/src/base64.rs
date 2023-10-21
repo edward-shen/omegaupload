@@ -18,11 +18,17 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use base64::{DecodeError, URL_SAFE};
+use base64::alphabet::URL_SAFE;
+use base64::engine::general_purpose::GeneralPurpose;
+use base64::engine::general_purpose::GeneralPurposeConfig;
+use base64::DecodeError;
+use base64::Engine;
+
+const URL_BASE64: GeneralPurpose = GeneralPurpose::new(&URL_SAFE, GeneralPurposeConfig::new());
 
 /// URL-safe Base64 encoding.
 pub fn encode(input: impl AsRef<[u8]>) -> String {
-    base64::encode_config(input, URL_SAFE)
+    URL_BASE64.encode(input)
 }
 
 /// URL-safe Base64 decoding.
@@ -32,5 +38,5 @@ pub fn encode(input: impl AsRef<[u8]>) -> String {
 /// Returns an error if a buffer cannot be decoded, such as if there's an
 /// incorrect number of bytes.
 pub fn decode(input: impl AsRef<[u8]>) -> Result<Vec<u8>, DecodeError> {
-    base64::decode_config(input, URL_SAFE)
+    URL_BASE64.decode(input)
 }

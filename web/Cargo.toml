@@ -15,12 +15,13 @@ anyhow = "1.0.58"
 bytes = "1.2.0"
 byte-unit = "4.0.14"
 console_error_panic_hook = "0.1.7"
-gloo-console = "0.2.1"
+gloo-console = "0.3"
 http = "0.2.8"
 js-sys = "0.3.59"
 mime_guess = "2.0.4"
 tree_magic_mini = { version = "3.0.3", features = ["with-gpl-data"] }
 serde = { version = "1.0.140", features = ["derive"] }
+serde-wasm-bindgen = { version = "0.6" }
 wasm-bindgen = { version = "0.2.82", features = ["serde-serialize"] }
 wasm-bindgen-futures = "0.4.32"
 zip = { version = "0.6.2", default-features = false, features = ["deflate"] }

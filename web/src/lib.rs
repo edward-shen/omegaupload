@@ -330,7 +330,7 @@ fn on_success(
                 JsValue::from(
                     entries
                         .iter()
-                        .filter_map(|x| JsValue::from_serde(x).ok())
+                        .filter_map(|x| serde_wasm_bindgen::to_value(x).ok())
                         .collect::<Array>(),
                 ),
             ),
